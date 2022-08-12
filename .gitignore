@@ -1,3 +1,7 @@
 .direnv
 .envrc
 .pre-commit-config.yaml
+output
+.spago
+.psc-ide-port
+*.log

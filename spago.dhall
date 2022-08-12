@@ -1,7 +1,34 @@
 { name = "marlowe"
 , license = "MIT"
 , repository = "https://github.com/input-output-hk/purescript-marlowe.git"
-, dependencies = [ "prelude" ]
+, dependencies =
+  [ "argonaut"
+  , "argonaut-codecs"
+  , "argonaut-core"
+  , "arrays"
+  , "bifunctors"
+  , "bigints"
+  , "contravariant"
+  , "control"
+  , "datetime"
+  , "either"
+  , "foldable-traversable"
+  , "foreign-object"
+  , "functions"
+  , "integers"
+  , "json-helpers"
+  , "lists"
+  , "maybe"
+  , "newtype"
+  , "ordered-collections"
+  , "partial"
+  , "prelude"
+  , "profunctor-lenses"
+  , "strings"
+  , "transformers"
+  , "tuples"
+  , "unfoldable"
+  ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs", "examples/**/*.purs" ]
 }
