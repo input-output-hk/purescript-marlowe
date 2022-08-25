@@ -1,5 +1,5 @@
-import * as bigInt from "big-integer";
-import * as JSONbig from "json-bigint";
+import bigInt from "big-integer";
+import JSONbig from "json-bigint";
 
 export function decodeBigInt(fail, succ, json) {
   if (Number.isInteger(json) || typeof json === "bigint") {
