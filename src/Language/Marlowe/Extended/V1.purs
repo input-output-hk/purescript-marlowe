@@ -3,6 +3,7 @@ module Language.Marlowe.Extended.V1 where
 import Prelude
 
 import Control.Alt ((<|>))
+import Control.Monad.Error.Class (throwError)
 import Control.Monad.Reader (runReaderT)
 import Data.Argonaut
   ( class DecodeJson
@@ -19,15 +20,19 @@ import Data.BigInt.Argonaut as BigInt
 import Data.DateTime.Instant (Instant, unInstant)
 import Data.Generic.Rep (class Generic)
 import Data.Int (round)
+import Data.Lens (Lens')
+import Data.Lens.Iso.Newtype (_Newtype)
+import Data.Lens.Record (prop)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
-import Data.Newtype (unwrap)
+import Data.Newtype (class Newtype, unwrap)
 import Data.Set (Set)
 import Data.Set as Set
 import Data.Show.Generic (genericShow)
 import Data.Traversable (foldMap, traverse)
 import Data.Tuple (Tuple(..))
 import Language.Marlowe.Core.V1.Semantics.Types as S
+import Language.Marlowe.Extended.V1.Metadata.Types (MetaData)
 import Marlowe.Template
   ( class Fillable
   , class Template
@@ -37,6 +42,7 @@ import Marlowe.Template
   , getPlaceholderIds
   )
 import Marlowe.Time (instantFromJson, instantToJson)
+import Type.Prelude (Proxy(..))
 
 class ToCore a b where
   toCore :: a -> Maybe b
@@ -726,3 +732,46 @@ instance contractHasChoices :: HasChoices Contract where
     getChoiceNames cases <> getChoiceNames cont
   getChoiceNames (Let _ val cont) = getChoiceNames val <> getChoiceNames cont
   getChoiceNames (Assert obs cont) = getChoiceNames obs <> getChoiceNames cont
+
+-- A module is a way to package a contract with it's metadata. Eventually
+-- this type could include imports and exports (reason behind the name).
+-- We don't include the version number in the datatype because it is implicit
+-- by the package name (`Language.Marlowe.Extended.V1`) and explicit by the
+-- JSON serialization.
+newtype Module = Module
+  { metadata :: MetaData
+  -- Currently we have a single entrypoint for the full contract, but we could
+  -- extend this to be a `OMap Identifier Contract` to enable functions.
+  -- In order to guarantee that we can convert to Marlowe Core we would need to
+  -- validate that a function can only call functions defined above (if bottom-up)
+  -- and that they cannot call themselves
+  , contract :: Contract
+  }
+
+derive instance Newtype Module _
+
+derive newtype instance Eq Module
+instance Show Module where
+  show (Module { metadata }) = "(Module " <> metadata.contractName <> ")"
+
+instance EncodeJson Module where
+  -- me_ stands for Marlowe Extended
+  encodeJson (Module { metadata, contract }) = encodeJson
+    { me_version: 1, contract, metadata }
+
+instance DecodeJson Module where
+  decodeJson =
+    object "Module" do
+      version <- requireProp "me_version"
+      when (version /= 1) $ throwError
+        $ AtKey "me_version"
+        $ TypeMismatch "1"
+      contract <- requireProp "contract"
+      metadata <- requireProp "metadata"
+      pure $ Just $ Module { metadata, contract }
+
+_metadata :: Lens' Module MetaData
+_metadata = _Newtype <<< prop (Proxy :: _ "metadata")
+
+_contract :: Lens' Module Contract
+_contract = _Newtype <<< prop (Proxy :: _ "contract")
