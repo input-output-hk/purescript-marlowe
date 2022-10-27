@@ -1190,6 +1190,27 @@ derive instance eqTransactionOutput :: Eq TransactionOutput
 instance showTransactionOutput :: Show TransactionOutput where
   show = genericShow
 
+instance EncodeJson TransactionOutput where
+  encodeJson (Error err) = encodeJson { transaction_error: encodeJson err }
+  encodeJson (TransactionOutput out) = encodeJson
+    { warnings: encodeJson out.txOutWarnings
+    , payments: encodeJson out.txOutPayments
+    , state: encodeJson out.txOutState
+    , contract: encodeJson out.txOutContract
+    }
+
+instance DecodeJson TransactionOutput where
+  decodeJson = object "TransactionOutput" (asError <|> asOutput)
+    where
+    asError = Just <$> Error <$> requireProp "transaction_error"
+    asOutput = do
+      txOutWarnings <- requireProp "warnings"
+      txOutPayments <- requireProp "payments"
+      txOutState <- requireProp "state"
+      txOutContract <- requireProp "contract"
+      pure $ Just $ TransactionOutput
+        { txOutWarnings, txOutPayments, txOutState, txOutContract }
+
 newtype MarloweData = MarloweData
   { marloweContract :: Contract
   , marloweState :: State

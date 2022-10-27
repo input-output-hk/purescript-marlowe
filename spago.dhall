@@ -11,7 +11,9 @@
   , "contravariant"
   , "control"
   , "datetime"
+  , "effect"
   , "either"
+  , "enums"
   , "foldable-traversable"
   , "foreign-object"
   , "functions"
@@ -27,8 +29,9 @@
   , "strings"
   , "transformers"
   , "tuples"
+  , "typelevel-prelude"
   , "unfoldable"
   ]
 , packages = ./packages.dhall
-, sources = [ "src/**/*.purs", "test/**/*.purs", "examples/**/*.purs" ]
+, sources = [ "src/**/*.purs" ]
 }
