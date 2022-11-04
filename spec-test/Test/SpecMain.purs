@@ -6,7 +6,7 @@ import Data.Argonaut (Json, decodeJson, encodeJson, stringify)
 import Data.Either (Either(..))
 import Effect (Effect)
 import Effect.Console (log)
-import Language.Marlowe.Core.V1.Semantics (computeTransaction) as C
+import Language.Marlowe.Core.V1.Semantics (computeTransaction, playTrace) as C
 import Node.Process (stdin)
 import Test.JsonStream (createJsonStream)
 import Test.Request (Request(..))
@@ -25,6 +25,10 @@ handleJsonRequest req = case decodeJson req of
     RequestResponse
       $ encodeJson
       $ C.computeTransaction input state contract
+  Right (PlayTrace initialTime contract inputs) ->
+    RequestResponse
+      $ encodeJson
+      $ C.playTrace initialTime contract inputs
 
 invalidJsonRequest :: String -> Response Json
 invalidJsonRequest = InvalidRequest
