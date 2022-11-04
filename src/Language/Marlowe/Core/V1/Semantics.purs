@@ -14,6 +14,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap, wrap)
 import Data.Tuple (Tuple(..))
+import Data.Tuple.Nested (type (/\), (/\))
 import Language.Marlowe.Core.V1.Semantics.Types
   ( AccountId
   , Accounts
@@ -181,12 +182,12 @@ evalObservation env state obs =
       FalseObs -> false
 
 -- | Pick the first account with money in it
-refundOne :: Accounts -> Maybe (Tuple (Tuple Party Money) Accounts)
+refundOne :: Accounts -> Maybe (Party /\ Token /\ BigInt /\ Accounts)
 refundOne accounts = case Map.toUnfoldable accounts of
   Nil -> Nothing
-  Tuple (Tuple accId (Token cur tok)) balance : rest ->
+  ((accId /\ token) /\ balance) : rest ->
     if balance > zero then
-      Just (Tuple (Tuple accId (asset cur tok balance)) (Map.fromFoldable rest))
+      Just (accId /\ token /\ balance /\ Map.fromFoldable rest)
     else
       refundOne (Map.fromFoldable rest)
 
@@ -226,27 +227,27 @@ giveMoney
   -> BigInt
   -> Accounts
   -> Tuple ReduceEffect Accounts
-giveMoney accountId payee token@(Token cur tok) amount accounts =
+giveMoney accountId payee token amount accounts =
   let
     newAccounts = case payee of
       Party _ -> accounts
       Account accId -> addMoneyToAccount accId token amount accounts
   in
-    Tuple (ReduceWithPayment (Payment accountId payee (asset cur tok amount)))
+    Tuple (ReduceWithPayment (Payment accountId payee token amount))
       newAccounts
 
 -- | Carry a step of the contract with no inputs
 reduceContractStep :: Environment -> State -> Contract -> ReduceStepResult
 reduceContractStep env state contract = case contract of
   Close -> case refundOne (unwrap state).accounts of
-    Just (Tuple (Tuple party money) newAccounts) ->
+    Just (party /\ token /\ amount /\ newAccounts) ->
       let
         oldState = unwrap state
 
         newState = wrap (oldState { accounts = newAccounts })
       in
         Reduced ReduceNoWarning
-          (ReduceWithPayment (Payment party (Party party) money))
+          (ReduceWithPayment (Payment party (Party party) token amount))
           newState
           Close
     Nothing -> NotReduced
