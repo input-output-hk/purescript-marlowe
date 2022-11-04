@@ -8,7 +8,7 @@ import Data.DateTime.Instant (Instant, unInstant)
 import Data.Foldable (class Foldable, any, foldl)
 import Data.FoldableWithIndex (foldMapWithIndex)
 import Data.Int (round)
-import Data.Lens (over, to, view)
+import Data.Lens (over, set, to, view)
 import Data.List (List(..), fromFoldable, reverse, (:))
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
@@ -41,6 +41,7 @@ import Language.Marlowe.Core.V1.Semantics.Types
   , ReduceWarning(..)
   , State(..)
   , TimeInterval(..)
+  , Timeout
   , Token(..)
   , TransactionError(..)
   , TransactionInput
@@ -49,6 +50,7 @@ import Language.Marlowe.Core.V1.Semantics.Types
   , Value(..)
   , _boundValues
   , _choices
+  , _minTime
   , _timeInterval
   , asset
   , ivFrom
@@ -488,6 +490,31 @@ computeTransaction tx state contract =
           ApplyAllAmbiguousTimeIntervalError -> Error
             TEAmbiguousTimeIntervalError
       IntervalError error -> Error (TEIntervalError error)
+
+playTrace :: Timeout -> Contract -> List TransactionInput -> TransactionOutput
+playTrace initialTime contract inputs =
+  go
+    { txOutWarnings: Nil
+    , txOutPayments: Nil
+    , txOutState: set _minTime initialTime emptyState
+    , txOutContract: contract
+    }
+    inputs
+  where
+  go res Nil = TransactionOutput res
+  go res (h : t) =
+    let
+      transRes = computeTransaction h res.txOutState res.txOutContract
+    in
+      case transRes of
+        TransactionOutput res' -> go
+          { txOutWarnings: res.txOutWarnings <> res'.txOutWarnings
+          , txOutPayments: res.txOutPayments <> res'.txOutPayments
+          , txOutState: res'.txOutState
+          , txOutContract: res'.txOutContract
+          }
+          t
+        Error _ -> transRes
 
 moneyInContract :: State -> Money
 moneyInContract state =
