@@ -11,8 +11,6 @@ import Data.Argonaut
   , decodeJson
   , encodeJson
   )
-import Data.Argonaut.Core (fromArray)
-import Data.Argonaut.Decode.Aeson ((</$\>), (</*\>))
 import Data.Argonaut.Decode.Aeson as D
 import Data.Argonaut.Encode.Aeson as E
 import Data.Argonaut.Encode.Encoders (encodeArray)
@@ -884,7 +882,7 @@ derive instance eqIntervalResult :: Eq IntervalResult
 instance showIntervalResult :: Show IntervalResult where
   show v = genericShow v
 
-data Payment = Payment AccountId Payee Money
+data Payment = Payment AccountId Payee Token BigInt
 
 derive instance genericPayment :: Generic Payment _
 
@@ -895,13 +893,22 @@ derive instance ordPayment :: Ord Payment
 instance showPayment :: Show Payment where
   show = genericShow
 
-instance encodePayment :: EncodeJson Payment where
-  encodeJson (Payment a p m) = fromArray
-    [ encodeJson a, encodeJson p, encodeJson m ]
+instance EncodeJson Payment where
+  encodeJson (Payment account payee token amount) = encodeJson
+    { amount
+    , "payment_from": encodeJson account
+    , "to": encodeJson payee
+    , token
+    }
 
-instance decodePayment :: DecodeJson Payment where
-  decodeJson = D.decode $ D.tuple $ Payment </$\> D.value </*\> D.value </*\>
-    D.value
+instance DecodeJson Payment where
+  decodeJson =
+    object "Payment" do
+      amount <- requireProp "amount"
+      account <- requireProp "payment_from"
+      payee <- requireProp "to"
+      token <- requireProp "token"
+      pure $ Just $ Payment amount account payee token
 
 data ReduceEffect
   = ReduceWithPayment Payment
