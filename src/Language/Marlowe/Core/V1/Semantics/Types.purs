@@ -45,12 +45,12 @@ import Data.Tuple.Nested ((/\))
 import Marlowe.Time (instantDecoder, instantFromJson, instantToJson, unixEpoch)
 import Type.Proxy (Proxy(..))
 
-type PubKey = String
+type Address = String
 
 type ValidatorHash = String
 
 data Party
-  = PK PubKey
+  = Address Address
   | Role TokenName
 
 derive instance genericParty :: Generic Party _
@@ -60,16 +60,16 @@ derive instance eqParty :: Eq Party
 derive instance ordParty :: Ord Party
 
 instance encodeJsonParty :: EncodeJson Party where
-  encodeJson (PK pubKey) = encodeJson { pk_hash: pubKey }
+  encodeJson (Address address) = encodeJson { address }
   encodeJson (Role tokName) = encodeJson { role_token: tokName }
 
 instance decodeJsonParty :: DecodeJson Party where
   decodeJson =
     object "Party" do
-      pkHash <- getProp "pk_hash"
+      address <- getProp "address"
       roleToken <- getProp "role_token"
       pure
-        $ (PK <$> pkHash)
+        $ (Address <$> address)
             <|> (Role <$> roleToken)
 
 instance showParty :: Show Party where
