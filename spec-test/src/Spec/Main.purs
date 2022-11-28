@@ -1,32 +1,39 @@
-module Test.SpecMain where
+module Spec.Main where
 
 import Prelude
 
+import Control.JsonStream (createJsonStream)
 import Data.Argonaut (Json, decodeJson, encodeJson, stringify)
 import Data.Either (Either(..))
 import Effect (Effect)
 import Effect.Console (log)
 import Language.Marlowe.Core.V1.Semantics (computeTransaction, playTrace) as C
 import Node.Process (stdin)
-import Test.JsonStream (createJsonStream)
-import Test.Request (Request(..))
-import Test.Response (Response(..))
-import Test.RoundtripSerialization (testRoundtripSerializationJson)
+import Spec.GenerateRandomValue (generateRandomValue)
+import Spec.Request (Request(..))
+import Spec.Response (Response(..))
+import Spec.RoundtripSerialization (testRoundtripSerializationJson)
 
-handleJsonRequest :: Json -> Response Json
+handleJsonRequest :: Json -> Effect (Response Json)
 handleJsonRequest req = case decodeJson req of
-  Left _ -> UnknownRequest
+  Left _ -> pure UnknownRequest
   Right (TestRoundtripSerialization typeId json) ->
-    RequestResponse
+    pure
+      $ RequestResponse
       $ encodeJson
       $ testRoundtripSerializationJson typeId json
-  Right (GenerateRandomValue _) -> RequestNotImplemented
-  Right (ComputeTransaction input state contract) ->
+  Right (GenerateRandomValue typeId) ->
     RequestResponse
+      <<< encodeJson
+      <$> generateRandomValue 5 typeId
+  Right (ComputeTransaction input state contract) ->
+    pure
+      $ RequestResponse
       $ encodeJson
       $ C.computeTransaction input state contract
   Right (PlayTrace initialTime contract inputs) ->
-    RequestResponse
+    pure
+      $ RequestResponse
       $ encodeJson
       $ C.playTrace initialTime contract inputs
 
@@ -39,7 +46,7 @@ main = createJsonStream
   , slizeSize: 4096
   , beginSeparator: "```"
   , endSeparator: "```"
-  , onJson: \req -> log $ stringify $ encodeJson $ handleJsonRequest req
+  , onJson: \req -> log <<< stringify <<< encodeJson =<< handleJsonRequest req
   , onError: \err -> log $ stringify $ encodeJson $ invalidJsonRequest $ show
       err
   , onFinish: log "Finished!"

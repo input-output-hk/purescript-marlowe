@@ -1,4 +1,4 @@
-module Test.Request where
+module Spec.Request where
 
 import Prelude
 
@@ -15,7 +15,7 @@ import Language.Marlowe.Core.V1.Semantics.Types
   , Timeout
   , TransactionInput
   ) as C
-import Test.RoundtripSerialization (TypeId)
+import Spec.TypeId (TypeId)
 
 data Request transport
   = TestRoundtripSerialization TypeId transport

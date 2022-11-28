@@ -1,4 +1,4 @@
-module Test.RoundtripSerialization where
+module Spec.RoundtripSerialization where
 
 import Prelude
 
@@ -31,16 +31,8 @@ import Language.Marlowe.Core.V1.Semantics.Types
   , Value
   ) as C
 import Language.Marlowe.Extended.V1 as EM
+import Spec.TypeId (TypeId(..))
 import Type.Proxy (Proxy(..))
-
-newtype TypeId = TypeId String
-
-derive newtype instance Show TypeId
-instance DecodeJson TypeId where
-  decodeJson j = TypeId <$> decodeJson j
-
-instance EncodeJson TypeId where
-  encodeJson (TypeId t) = encodeJson t
 
 data SerializationResponse transport
   = SerializationSuccess transport

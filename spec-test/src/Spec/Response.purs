@@ -1,4 +1,4 @@
-module Test.Response (Response(..)) where
+module Spec.Response (Response(..)) where
 
 import Data.Argonaut (class EncodeJson, Json, encodeJson)
 

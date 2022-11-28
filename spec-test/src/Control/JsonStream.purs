@@ -1,4 +1,4 @@
-module Test.JsonStream (createJsonStream, JsonStreamError(..)) where
+module Control.JsonStream (createJsonStream, JsonStreamError(..)) where
 
 import Prelude
 
