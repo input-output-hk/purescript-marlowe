@@ -11,7 +11,12 @@ in  { name = "marlowe-spec-cli"
           , "gen"
           , "nonempty"
           , "quickcheck"
+          , "record"
           , "tailrec"
+          , "aff"
+          , "coroutines"
+          , "aff-coroutines"
+          , "spec"
           ]
     , packages = ./packages.dhall
     , sources = [ "src/**/*.purs", "spec-test/**/*.purs" ]
