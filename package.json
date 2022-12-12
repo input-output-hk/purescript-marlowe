@@ -5,7 +5,7 @@
   "main": "spec-client.mjs",
   "scripts": {
     "build": "spago build",
-    "build-spec": "spago -x spec-test/spec-test.dhall build",
+    "build-spec": "spago -x spec-test.dhall build",
     "run-spec": "npm run build-spec && node spec-client.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
