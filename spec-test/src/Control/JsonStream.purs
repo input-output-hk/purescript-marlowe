@@ -13,17 +13,17 @@ import Record.Builder (build, insert)
 import Type.Proxy (Proxy(..))
 
 data JsonStreamError
-  = StreamError
+  = StreamError String
   | InvalidJson
 
 derive instance Eq JsonStreamError
 
 instance Show JsonStreamError where
-  show StreamError = "Stream Error"
+  show (StreamError err) = "Stream Error: " <> err
   show InvalidJson = "Invalid Json"
 
 type FFIOptions s =
-  ( streamError :: JsonStreamError
+  ( streamError :: String -> JsonStreamError
   , invalidJson :: JsonStreamError
   | CreateJsonStreamOptions s
   )
@@ -39,7 +39,7 @@ foreign import _createJsonStream
 
 type CreateJsonStreamOptions s =
   ( stream :: Readable s
-  , slizeSize :: Int
+  , sliceSize :: Int
   , beginSeparator :: String
   , endSeparator :: String
   , onJson :: Json -> Effect Unit

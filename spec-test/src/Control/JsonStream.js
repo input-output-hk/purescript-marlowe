@@ -4,7 +4,7 @@
 // an onJson event.
 export function _createJsonStream({
   stream,
-  slizeSize,
+  sliceSize,
   beginSeparator,
   endSeparator,
   onJson,
@@ -15,19 +15,19 @@ export function _createJsonStream({
 }) {
   return () => {
     stream.setEncoding("utf8");
-    let jsonBuffer = Buffer.alloc(slizeSize);
+    let jsonBuffer = Buffer.alloc(sliceSize);
     let jsonIndex = 0;
     let inJson = false;
 
     function resizeBuffer(minSize) {
       jsonBuffer = Buffer.concat([
         jsonBuffer,
-        Buffer.alloc(Math.max(minSize, slizeSize)),
+        Buffer.alloc(Math.max(minSize, sliceSize)),
       ]);
     }
 
     stream.on("close", () => onFinish());
-    stream.on("error", () => onError(streamError)());
+    stream.on("error", (err) => onError(streamError(err.toString()))());
     stream.on("data", (chunk) => {
       let i = 0;
       const chunkString = chunk.toString();
@@ -43,6 +43,7 @@ export function _createJsonStream({
           } else {
             inJson = true;
             i += beginSeparator.length;
+            continue;
           }
         }
 
