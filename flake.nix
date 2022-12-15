@@ -12,6 +12,7 @@
       url = "github:justinwoo/easy-purescript-nix";
       flake = false;
     };
+    marloweSpec.url = "github:input-output-hk/marlowe";
     rnix-lsp = {
       url = "github:nix-community/rnix-lsp";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -22,7 +23,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, pre-commit-hooks, flake-utils, easy-purescript-nix, rnix-lsp, gitignore }:
+  outputs = { self, nixpkgs, pre-commit-hooks, flake-utils, easy-purescript-nix, rnix-lsp, gitignore, marloweSpec }:
     flake-utils.lib.eachDefaultSystem
       (system:
         let
@@ -37,7 +38,6 @@
           inherit (builtins) concatStringsSep;
 
           src = gitignoreSource ./.;
-
 
           writeShellScriptBinInRepoRoot = name: script: writeShellScriptBin name ''
             cd `${git}/bin/git rev-parse --show-toplevel`
@@ -125,6 +125,7 @@
             }
             echo done.
           '';
+          marloweSpecBin = marloweSpec.packages."${system}"."marlowe-spec-test:exe:marlowe-spec";
 
           marlowe =
             pkgs.stdenv.mkDerivation {
@@ -167,6 +168,7 @@
               format
               nixpkgs-fmt
               rnix-lsp.defaultPackage."${system}"
+              marloweSpecBin
               test
               prettier
               bower
