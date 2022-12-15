@@ -13,21 +13,19 @@
       flake = false;
     };
     marloweSpec.url = "github:input-output-hk/marlowe";
-    rnix-lsp = {
-      url = "github:nix-community/rnix-lsp";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    nixLsp.url = "github:oxalica/nil";
     gitignore = {
       url = "github:hercules-ci/gitignore.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { self, nixpkgs, pre-commit-hooks, flake-utils, easy-purescript-nix, rnix-lsp, gitignore, marloweSpec }:
+  outputs = { self, nixpkgs, pre-commit-hooks, flake-utils, easy-purescript-nix, nixLsp, gitignore, marloweSpec }:
     flake-utils.lib.eachDefaultSystem
       (system:
         let
-          pkgs = import nixpkgs { inherit system; };
+          overlays = [ nixLsp.overlays.nil ];
+          pkgs = import nixpkgs { inherit system overlays; };
           easy-ps = import easy-purescript-nix { inherit pkgs; };
           spagoPkgs = import ./spago-packages.nix { inherit pkgs; };
 
@@ -167,7 +165,7 @@
               clean-build
               format
               nixpkgs-fmt
-              rnix-lsp.defaultPackage."${system}"
+              pkgs.nil
               marloweSpecBin
               test
               prettier
