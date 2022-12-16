@@ -2,6 +2,7 @@
 , src
 , easy-ps
 , writeShellScriptBinInRepoRoot
+, marloweSpecDriver
 }:
 let
   inherit (easy-ps) spago psa purs spago2nix;
@@ -48,23 +49,31 @@ let
     fi
 
     echo building project...
-    ${psa}/bin/psa compile ${psa-args} ${spagoSources} "./src/**/*.purs"
+    ${psa}/bin/psa ${psa-args} ${spagoSources} "./src/**/*.purs"
     echo done.
   '';
 
   test = writeShellScriptBinInRepoRoot "marlowe-test" ''
     set -e
-    psa compile ${psa-args} ${spagoSources} "./src/**/*.purs" "./test/**/*.purs" "./spec-test/**/*.purs"
+    if [ ! -d ".spago" ]; then
+      ${spagoPkgs.installSpagoStyle}/bin/install-spago-style
+    fi
+    ${psa}/bin/psa ${psa-args} ${spagoSources} "./src/**/*.purs" "./spec-test/**/*.purs"
     node -e 'import("./output/Test.Main/index.js").then(module => module.main())'
+    ${marloweSpecDriver}/bin/marlowe-spec -c ${marlowe-spec-client}/bin/marlowe-spec-client
   '';
 
   clean-build = writeShellScriptBin "clean-build" ''
     ${clean}/bin/clean
     ${build}/bin/marlowe-build
   '';
+
+  marlowe-spec-client = writeShellScriptBinInRepoRoot "marlowe-spec-client" ''
+    ${nodejs}/bin/node spec-client.mjs
+  '';
 in
 {
-  inherit build test clean-build clean generateSpagoPackages;
+  inherit build test clean-build clean generateSpagoPackages marlowe-spec-client;
   marlowe =
     pkgs.stdenv.mkDerivation {
       name = "purescript-marlowe";

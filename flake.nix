@@ -55,17 +55,17 @@
           };
 
           purescript-marlowe = import ./nix/purescript-marlowe.nix {
-            inherit pkgs src easy-ps writeShellScriptBinInRepoRoot;
+            inherit pkgs src easy-ps writeShellScriptBinInRepoRoot marloweSpecDriver;
           };
 
-          marloweSpecBin = marloweSpec.packages."${system}"."marlowe-spec-test:exe:marlowe-spec";
+          marloweSpecDriver = marloweSpec.packages."${system}"."marlowe-spec-test:exe:marlowe-spec";
         in
         {
           packages.default = purescript-marlowe.marlowe;
           packages.generateSpagoPackages = purescript-marlowe.generateSpagoPackages;
           devShell = mkShell {
             buildInputs = [
-              marloweSpecBin
+              marloweSpecDriver
               pkgs.nil
               pkgs.nodejs
               nodePackages.prettier
@@ -86,6 +86,7 @@
               clean-build
               test
               generateSpagoPackages
+              marlowe-spec-client
             ]) ++
             (with formatting; [
               fix-purs-tidy
