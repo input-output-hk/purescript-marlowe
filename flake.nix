@@ -69,6 +69,7 @@
             packages = {
               default = purescript-marlowe.marlowe;
               generateSpagoPackages = purescript-marlowe.generateSpagoPackages;
+              generateNpmPackages = purescript-marlowe.generateNpmPackages;
             };
           in
           {
@@ -82,6 +83,7 @@
                 pkgs.nodejs
                 nodePackages.prettier
                 nodePackages.bower
+                nodePackages.node2nix
               ] ++
               (with easy-ps; [
                 dhall-simple

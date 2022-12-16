@@ -1,11 +1,19 @@
 .direnv
 .envrc
 .pre-commit-config.yaml
-output
-.spago
-.psc-ide-port
 *.log
+
+# Node artifacts
+node_modules
+
+# Purescript artifacts
+.psc-ide-port
+.spago
 .spago2nix
 .psci_modules
+.psa-stash
+.purs-repl
+output
+
 # Nix flake output
 result
