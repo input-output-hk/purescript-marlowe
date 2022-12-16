@@ -1,5 +1,5 @@
 {
-  description = "PureScript implementation of the Marlowe smart contract lanugage";
+  description = "PureScript implementation of the Marlowe smart contract language";
 
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
@@ -26,13 +26,10 @@
         let
           overlays = [ nixLsp.overlays.nil ];
           pkgs = import nixpkgs { inherit system overlays; };
-          easy-ps = import easy-purescript-nix { inherit pkgs; };
-          spagoPkgs = import ./spago-packages.nix { inherit pkgs; };
-
           inherit (gitignore.lib) gitignoreSource;
-          inherit (easy-ps) spago psa purs;
-          inherit (pkgs) git writeShellScriptBin nodePackages mkShell nodejs nixpkgs-fmt;
-          inherit (nodePackages) bower prettier;
+          inherit (pkgs) git writeShellScriptBin mkShell nodePackages;
+
+          easy-ps = import easy-purescript-nix { inherit pkgs; };
 
           src = gitignoreSource ./.;
 
@@ -57,89 +54,39 @@
             };
           };
 
-          clean = writeShellScriptBinInRepoRoot "clean" ''
-            echo cleaning project...
-            rm -rf .spago .spago2nix output .psa-stash
-            echo removed .spago
-            echo removed .spago2nix
-            echo removed .psa-stash
-            echo removed output
-            echo done.
-          '';
-
-          psa-args = "--strict --stash --censor-lib --is-lib=.spago";
-
-          runSpago = cmd: ''
-            ${spago}/bin/spago ${cmd} --purs-args "${psa-args} --stash"
-          '';
-
-          getGlob = { name, version, ... }: ''".spago/${name}/${version}/src/**/*.purs"'';
-
-          spagoSources =
-            builtins.toString
-              (builtins.map getGlob (builtins.attrValues spagoPkgs.inputs));
-
-          build = writeShellScriptBin "build" (runSpago "build");
-          test = writeShellScriptBin "test" (runSpago "test");
-          clean-build = writeShellScriptBin "clean-build" ''
-            ${clean}/bin/clean
-            ${build}/bin/build
-          '';
+          purescript-marlowe = import ./nix/purescript-marlowe.nix {
+            inherit pkgs src easy-ps writeShellScriptBinInRepoRoot;
+          };
 
           marloweSpecBin = marloweSpec.packages."${system}"."marlowe-spec-test:exe:marlowe-spec";
-
-          marlowe =
-            pkgs.stdenv.mkDerivation {
-              name = "purescript-marlowe";
-              buildInputs = [
-                spagoPkgs.installSpagoStyle
-              ];
-              nativeBuildInputs = [ psa purs nodejs ];
-              inherit src;
-              unpackPhase = ''
-                cp -r $src/* .
-                install-spago-style
-              '';
-              buildPhase = ''
-                set -e
-                echo building project...
-                psa compile ${psa-args} ${spagoSources} "./src/**/*.purs"
-                echo done.
-              '';
-              installPhase = ''
-                mkdir $out
-                mv output $out/
-              '';
-              doCheck = true;
-              checkPhase = ''
-                set -e
-                psa compile ${psa-args} ${spagoSources} "./src/**/*.purs" "./test/**/*.purs"
-                node -e 'require("./output/Test.Main/index").main()'
-              '';
-            };
-
         in
         {
-          defaultPackage = marlowe;
+          packages.default = purescript-marlowe.marlowe;
+          packages.generateSpagoPackages = purescript-marlowe.generateSpagoPackages;
           devShell = mkShell {
             buildInputs = [
+              marloweSpecBin
+              pkgs.nil
+              pkgs.nodejs
+              nodePackages.prettier
+              nodePackages.bower
+            ] ++
+            (with easy-ps; [
+              dhall-simple
+              purs
+              psa
+              spago
+              spago2nix
+              purs-tidy
+              purescript-language-server
+            ]) ++
+            (with purescript-marlowe; [
               build
               clean
               clean-build
-              nixpkgs-fmt
-              pkgs.nil
-              marloweSpecBin
               test
-              prettier
-              bower
-              nodejs
-              easy-ps.dhall-simple
-              easy-ps.purs
-              easy-ps.spago
-              easy-ps.spago2nix
-              easy-ps.purs-tidy
-              easy-ps.purescript-language-server
-            ] ++
+              generateSpagoPackages
+            ]) ++
             (with formatting; [
               fix-purs-tidy
               fix-nix-fmt

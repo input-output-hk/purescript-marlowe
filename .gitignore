@@ -5,3 +5,7 @@ output
 .spago
 .psc-ide-port
 *.log
+.spago2nix
+.psci_modules
+# Nix flake output
+result
