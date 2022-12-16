@@ -43,7 +43,7 @@ invalidJsonRequest = InvalidRequest
 main :: Effect Unit
 main = createJsonStream
   { stream: stdin
-  , slizeSize: 4096
+  , sliceSize: 4096
   , beginSeparator: "```"
   , endSeparator: "```"
   , onJson: \req -> log <<< stringify <<< encodeJson =<< handleJsonRequest req

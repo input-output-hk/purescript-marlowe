@@ -8,10 +8,16 @@ in  { name = "marlowe-spec-cli"
         # [ "console"
           , "node-process"
           , "node-streams"
+          , "node-buffer"
           , "gen"
           , "nonempty"
           , "quickcheck"
+          , "record"
           , "tailrec"
+          , "aff"
+          , "coroutines"
+          , "aff-coroutines"
+          , "spec"
           ]
     , packages = ./packages.dhall
     , sources = [ "src/**/*.purs", "spec-test/**/*.purs" ]

@@ -170,6 +170,7 @@
               test
               prettier
               bower
+              nodejs
               easy-ps.dhall-simple
               easy-ps.purs
               easy-ps.spago

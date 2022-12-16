@@ -242,7 +242,7 @@ genValue' size
 
           genNewValue = genValue' newSize
 
-          genNewValueIndexed i = genValue' newSize
+          genNewValueIndexed _ = genValue' newSize
 
         oneOf $ pure TimeIntervalStart
           :|

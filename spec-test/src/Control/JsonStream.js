@@ -4,7 +4,7 @@
 // an onJson event.
 export function _createJsonStream({
   stream,
-  slizeSize,
+  sliceSize,
   beginSeparator,
   endSeparator,
   onJson,
@@ -15,33 +15,35 @@ export function _createJsonStream({
 }) {
   return () => {
     stream.setEncoding("utf8");
-    let jsonBuffer = Buffer.alloc(slizeSize);
+    let jsonBuffer = Buffer.alloc(sliceSize);
     let jsonIndex = 0;
     let inJson = false;
 
     function resizeBuffer(minSize) {
       jsonBuffer = Buffer.concat([
         jsonBuffer,
-        Buffer.alloc(Math.max(minSize, slizeSize)),
+        Buffer.alloc(Math.max(minSize, sliceSize)),
       ]);
     }
 
     stream.on("close", () => onFinish());
-    stream.on("error", () => onError(streamError)());
+    stream.on("error", (err) => onError(streamError(err.toString()))());
     stream.on("data", (chunk) => {
       let i = 0;
+      const chunkString = chunk.toString();
       while (i < chunk.length) {
         // If we are not in Json mode then we discard characters until we see the beginSeparator
         if (!inJson) {
           if (
             i + beginSeparator.length > chunk.length ||
-            chunk.toString().substring(i, i + beginSeparator.length) !=
+            chunkString.substring(i, i + beginSeparator.length) !=
               beginSeparator
           ) {
             i++;
           } else {
             inJson = true;
             i += beginSeparator.length;
+            continue;
           }
         }
 
@@ -49,10 +51,10 @@ export function _createJsonStream({
         // or if we are accumulating chars into the jsonBuffer (with possible resize)
         if (inJson) {
           if (
-            i + endSeparator.length < chunk.length &&
-            chunk.toString().substring(i, i + endSeparator.length) ==
-              endSeparator
+            i + endSeparator.length <= chunk.length &&
+            chunkString.substring(i, i + endSeparator.length) == endSeparator
           ) {
+            // If we are here, we are ending the sequence
             const jsonString = jsonBuffer.toString().substring(0, jsonIndex);
 
             let json;
@@ -63,8 +65,8 @@ export function _createJsonStream({
               onError(invalidJson)();
             } else {
               onJson(json)();
-              i += endSeparator.length;
             }
+            i += endSeparator.length;
             inJson = false;
             jsonIndex = 0;
           } else {
