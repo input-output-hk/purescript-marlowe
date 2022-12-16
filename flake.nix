@@ -30,10 +30,9 @@
           spagoPkgs = import ./spago-packages.nix { inherit pkgs; };
 
           inherit (gitignore.lib) gitignoreSource;
-          inherit (easy-ps) dhall-simple purs-tidy spago psa purs;
+          inherit (easy-ps) spago psa purs;
           inherit (pkgs) git writeShellScriptBin nodePackages mkShell nodejs nixpkgs-fmt;
           inherit (nodePackages) bower prettier;
-          inherit (builtins) concatStringsSep;
 
           src = gitignoreSource ./.;
 
@@ -42,36 +41,8 @@
             ${script}
           '';
 
-          extensionsToRegex = extensions: "\\.(${concatStringsSep "|" extensions})";
-
-          formatter = name: cmd: extensions: ''
-            echo formatting with ${name}
-            ${git}/bin/git ls-files | grep -E '${extensionsToRegex extensions}' | xargs -d $'\\n' ${cmd}
-          '';
-
-          dhall-batch = writeShellScriptBin "dhall" ''
-            for f in "$@"; do ${dhall-simple}/bin/dhall format --inplace $f; done
-          '';
-
-          purs-tidy-hook = {
-            enable = true;
-            name = "purs-tidy";
-            entry = "${purs-tidy}/bin/purs-tidy format-in-place";
-            files = "\\.purs$";
-            language = "system";
-          };
-
-          dhall-hook = {
-            enable = true;
-            name = "dhall";
-            entry = "${dhall-batch}/bin/dhall";
-            files = "\\.dhall$";
-            language = "system";
-          };
-
-          prettier-hook = {
-            enable = true;
-            types_or = [ "javascript" "css" "html" ];
+          formatting = import ./nix/formatting.nix {
+            inherit writeShellScriptBinInRepoRoot pkgs easy-ps;
           };
 
           pre-commit-check = pre-commit-hooks.lib.${system}.run {
@@ -81,8 +52,8 @@
                 enable = true;
                 excludes = [ ".*spago-packages.nix$" ];
               };
-              prettier = prettier-hook;
-              inherit purs-tidy-hook dhall-hook;
+              prettier = formatting.prettier-hook;
+              inherit (formatting) purs-tidy-hook dhall-hook;
             };
           };
 
@@ -115,14 +86,6 @@
             ${build}/bin/build
           '';
 
-          format = writeShellScriptBin "format" ''
-            set -e
-            ${formatter "purs-tidy" "${purs-tidy}/bin/purs-tidy format-in-place" ["purs"]}
-            ${formatter "dhall" "${dhall-batch}/bin/dhall" ["dhall"]}
-            ${formatter "prettier" "${prettier}/bin/prettier -w" ["js" "ts" "css" "html"]
-            }
-            echo done.
-          '';
           marloweSpecBin = marloweSpec.packages."${system}"."marlowe-spec-test:exe:marlowe-spec";
 
           marlowe =
@@ -163,7 +126,6 @@
               build
               clean
               clean-build
-              format
               nixpkgs-fmt
               pkgs.nil
               marloweSpecBin
@@ -177,7 +139,13 @@
               easy-ps.spago2nix
               easy-ps.purs-tidy
               easy-ps.purescript-language-server
-            ];
+            ] ++
+            (with formatting; [
+              fix-purs-tidy
+              fix-nix-fmt
+              fix-prettier
+            ]
+            );
             inherit (pre-commit-check) shellHook;
           };
         }
