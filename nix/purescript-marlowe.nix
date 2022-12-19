@@ -13,7 +13,7 @@ let
 
   nodePkgs = import ./node { inherit pkgs; };
 
-  psa-args = "--strict --stash --censor-lib --is-lib=.spago";
+  psa-args = "--strict --stash --censor-lib --is-lib=.spago --purs=${purs}/bin/purs";
 
   getGlob = { name, version, ... }: ''".spago/${name}/${version}/src/**/*.purs"'';
 
@@ -72,6 +72,7 @@ let
     if [ ! -d ".spago" ]; then
       ${spagoPkgs.installSpagoStyle}/bin/install-spago-style
     fi
+
     ${psa}/bin/psa ${psa-args} ${spagoSources} "./src/**/*.purs" "./spec-test/**/*.purs"
 
     echo "Local tests"

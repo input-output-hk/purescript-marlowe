@@ -75,8 +75,7 @@
           {
             inherit packages;
             hydraJobs = packages;
-
-            devShell = mkShell {
+            devShells.default = mkShell {
               buildInputs = [
                 marloweSpecDriver
                 pkgs.nil
