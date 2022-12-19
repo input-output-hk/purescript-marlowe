@@ -101,6 +101,8 @@
                 test
                 generateSpagoPackages
                 marlowe-spec-client
+                build-docs
+                serve-docs
               ]) ++
               (with formatting; [
                 fix-purs-tidy

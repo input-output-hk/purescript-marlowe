@@ -23,11 +23,13 @@ let
 
   clean = writeShellScriptBinInRepoRoot "clean" ''
     echo cleaning project...
-    rm -rf .spago .spago2nix output .psa-stash
+    rm -rf .spago .spago2nix output .psa-stash node_modules generated-docs
     echo removed .spago
     echo removed .spago2nix
-    echo removed .psa-stash
     echo removed output
+    echo removed .psa-stash
+    echo removed node_modules
+    echo removed generated-docs
     echo done.
   '';
 
@@ -84,6 +86,19 @@ let
     ${build}/bin/marlowe-build
   '';
 
+  build-docs = writeShellScriptBinInRepoRoot "build-docs" ''
+    ${spago}/bin/spago docs
+  '';
+
+  serve-docs = writeShellScriptBinInRepoRoot "serve-docs" ''
+    if [ ! -d "generated-docs" ]; then
+      ${build-docs}/bin/build-docs
+    fi
+
+    cd generated-docs/html
+    ${nodejs}/bin/npx http-server -g -o
+  '';
+
   marlowe-spec-client = writeShellScriptBin "marlowe-spec-client" ''
     ${nodejs}/bin/node spec-client.mjs
   '';
@@ -94,6 +109,8 @@ in
     test
     clean-build
     clean
+    build-docs
+    serve-docs
     generateSpagoPackages
     marlowe-spec-client
     generateNpmPackages
