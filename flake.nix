@@ -1,5 +1,5 @@
 {
-  description = "PureScript implementation of the Marlowe smart contract lanugage";
+  description = "PureScript implementation of the Marlowe smart contract language";
 
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
@@ -12,174 +12,118 @@
       url = "github:justinwoo/easy-purescript-nix";
       flake = false;
     };
-    rnix-lsp = {
-      url = "github:nix-community/rnix-lsp";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    marloweSpec.url = "github:input-output-hk/marlowe";
+    nixLsp.url = "github:oxalica/nil";
     gitignore = {
       url = "github:hercules-ci/gitignore.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { self, nixpkgs, pre-commit-hooks, flake-utils, easy-purescript-nix, rnix-lsp, gitignore }:
-    flake-utils.lib.eachDefaultSystem
-      (system:
-        let
-          pkgs = import nixpkgs { inherit system; };
-          easy-ps = import easy-purescript-nix { inherit pkgs; };
-          spagoPkgs = import ./spago-packages.nix { inherit pkgs; };
+  outputs = { self, nixpkgs, pre-commit-hooks, flake-utils, easy-purescript-nix, nixLsp, gitignore, marloweSpec }:
+    let
+      inherit (flake-utils.lib) eachSystem system;
+      supportedSystems = [ system.x86_64-linux system.x86_64-darwin ];
 
-          inherit (gitignore.lib) gitignoreSource;
-          inherit (easy-ps) dhall-simple purs-tidy spago psa purs;
-          inherit (pkgs) git writeShellScriptBin nodePackages mkShell nodejs nixpkgs-fmt;
-          inherit (nodePackages) bower prettier;
-          inherit (builtins) concatStringsSep;
+      base = { evalSystem ? null }: eachSystem supportedSystems
+        (system:
+          let evalSystem' = if evalSystem == null then system else evalSystem; in
+          let
+            evalSystem = evalSystem';
+            overlays = [ nixLsp.overlays.nil ];
+            pkgs = import nixpkgs { inherit system overlays; };
+            inherit (gitignore.lib) gitignoreSource;
+            inherit (pkgs) git writeShellScriptBin mkShell nodePackages;
 
-          src = gitignoreSource ./.;
+            easy-ps = import easy-purescript-nix { inherit pkgs; };
 
+            src = gitignoreSource ./.;
 
-          writeShellScriptBinInRepoRoot = name: script: writeShellScriptBin name ''
-            cd `${git}/bin/git rev-parse --show-toplevel`
-            ${script}
-          '';
+            writeShellScriptBinInRepoRoot = name: script: writeShellScriptBin name ''
+              cd `${git}/bin/git rev-parse --show-toplevel`
+              ${script}
+            '';
 
-          extensionsToRegex = extensions: "\\.(${concatStringsSep "|" extensions})";
-
-          formatter = name: cmd: extensions: ''
-            echo formatting with ${name}
-            ${git}/bin/git ls-files | grep -E '${extensionsToRegex extensions}' | xargs -d $'\\n' ${cmd}
-          '';
-
-          dhall-batch = writeShellScriptBin "dhall" ''
-            for f in "$@"; do ${dhall-simple}/bin/dhall format --inplace $f; done
-          '';
-
-          purs-tidy-hook = {
-            enable = true;
-            name = "purs-tidy";
-            entry = "${purs-tidy}/bin/purs-tidy format-in-place";
-            files = "\\.purs$";
-            language = "system";
-          };
-
-          dhall-hook = {
-            enable = true;
-            name = "dhall";
-            entry = "${dhall-batch}/bin/dhall";
-            files = "\\.dhall$";
-            language = "system";
-          };
-
-          prettier-hook = {
-            enable = true;
-            types_or = [ "javascript" "css" "html" ];
-          };
-
-          pre-commit-check = pre-commit-hooks.lib.${system}.run {
-            inherit src;
-            hooks = {
-              nixpkgs-fmt = {
-                enable = true;
-                excludes = [ ".*spago-packages.nix$" ];
-              };
-              prettier = prettier-hook;
-              inherit purs-tidy-hook dhall-hook;
+            formatting = import ./nix/formatting.nix {
+              inherit writeShellScriptBinInRepoRoot pkgs easy-ps;
             };
-          };
 
-          clean = writeShellScriptBinInRepoRoot "clean" ''
-            echo cleaning project...
-            rm -rf .spago .spago2nix output .psa-stash
-            echo removed .spago
-            echo removed .spago2nix
-            echo removed .psa-stash
-            echo removed output
-            echo done.
-          '';
-
-          psa-args = "--strict --stash --censor-lib --is-lib=.spago";
-
-          runSpago = cmd: ''
-            ${spago}/bin/spago ${cmd} --purs-args "${psa-args} --stash"
-          '';
-
-          getGlob = { name, version, ... }: ''".spago/${name}/${version}/src/**/*.purs"'';
-
-          spagoSources =
-            builtins.toString
-              (builtins.map getGlob (builtins.attrValues spagoPkgs.inputs));
-
-          build = writeShellScriptBin "build" (runSpago "build");
-          test = writeShellScriptBin "test" (runSpago "test");
-          clean-build = writeShellScriptBin "clean-build" ''
-            ${clean}/bin/clean
-            ${build}/bin/build
-          '';
-
-          format = writeShellScriptBin "format" ''
-            set -e
-            ${formatter "purs-tidy" "${purs-tidy}/bin/purs-tidy format-in-place" ["purs"]}
-            ${formatter "dhall" "${dhall-batch}/bin/dhall" ["dhall"]}
-            ${formatter "prettier" "${prettier}/bin/prettier -w" ["js" "ts" "css" "html"]
-            }
-            echo done.
-          '';
-
-          marlowe =
-            pkgs.stdenv.mkDerivation {
-              name = "purescript-marlowe";
-              buildInputs = [
-                spagoPkgs.installSpagoStyle
-              ];
-              nativeBuildInputs = [ psa purs nodejs ];
+            pre-commit-check = pre-commit-hooks.lib.${system}.run {
               inherit src;
-              unpackPhase = ''
-                cp -r $src/* .
-                install-spago-style
-              '';
-              buildPhase = ''
-                set -e
-                echo building project...
-                psa compile ${psa-args} ${spagoSources} "./src/**/*.purs"
-                echo done.
-              '';
-              installPhase = ''
-                mkdir $out
-                mv output $out/
-              '';
-              doCheck = true;
-              checkPhase = ''
-                set -e
-                psa compile ${psa-args} ${spagoSources} "./src/**/*.purs" "./test/**/*.purs"
-                node -e 'require("./output/Test.Main/index").main()'
-              '';
+              hooks = {
+                nixpkgs-fmt = {
+                  enable = true;
+                  excludes = [ ".*spago-packages.nix$" ];
+                };
+                prettier = formatting.prettier-hook;
+                inherit (formatting) purs-tidy-hook dhall-hook;
+              };
             };
 
-        in
-        {
-          defaultPackage = marlowe;
-          devShell = mkShell {
-            buildInputs = [
-              build
-              clean
-              clean-build
-              format
-              nixpkgs-fmt
-              rnix-lsp.defaultPackage."${system}"
-              test
-              prettier
-              bower
-              nodejs
-              easy-ps.dhall-simple
-              easy-ps.purs
-              easy-ps.spago
-              easy-ps.spago2nix
-              easy-ps.purs-tidy
-              easy-ps.purescript-language-server
-            ];
-            inherit (pre-commit-check) shellHook;
-          };
-        }
-      );
+            purescript-marlowe = import ./nix/purescript-marlowe.nix {
+              inherit pkgs src easy-ps writeShellScriptBinInRepoRoot marloweSpecDriver;
+            };
+
+            marloweSpecDriver = marloweSpec.packages."${system}"."marlowe-spec-test:exe:marlowe-spec";
+
+            packages = {
+              default = purescript-marlowe.marlowe;
+              generateSpagoPackages = purescript-marlowe.generateSpagoPackages;
+              generateNpmPackages = purescript-marlowe.generateNpmPackages;
+            };
+          in
+          {
+            inherit packages;
+            hydraJobs = packages;
+            devShells.default = mkShell {
+              buildInputs = [
+                marloweSpecDriver
+                pkgs.nil
+                pkgs.nodejs
+                nodePackages.prettier
+                nodePackages.bower
+                nodePackages.node2nix
+              ] ++
+              (with easy-ps; [
+                dhall-simple
+                purs
+                psa
+                spago
+                spago2nix
+                purs-tidy
+                purescript-language-server
+              ]) ++
+              (with purescript-marlowe; [
+                build
+                clean
+                clean-build
+                test
+                generateSpagoPackages
+                marlowe-spec-client
+                build-docs
+                serve-docs
+              ]) ++
+              (with formatting; [
+                fix-purs-tidy
+                fix-nix-fmt
+                fix-prettier
+              ]
+              );
+              inherit (pre-commit-check) shellHook;
+            };
+          }
+        );
+      hydraSystem = "x86_64-linux";
+      pkgsHydra = nixpkgs.legacyPackages.${hydraSystem};
+      baseHydra = base { evalSystem = hydraSystem; };
+    in
+    base { } // {
+      hydraJobs = baseHydra.hydraJobs // {
+        forceNewEval = pkgsHydra.writeText "forceNewEval" (self.rev or self.lastModified);
+        required = pkgsHydra.releaseTools.aggregate {
+          name = "purescript-marlowe";
+          constituents = builtins.concatMap (system: map (x: "${x}.${system}") (builtins.attrNames baseHydra.hydraJobs)) supportedSystems;
+        };
+      };
+    };
 }

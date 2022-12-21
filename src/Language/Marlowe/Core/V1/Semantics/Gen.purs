@@ -350,7 +350,7 @@ genContract' size
 
           genNewObservation = genObservation' newSize
 
-          genNewContractIndexed i = genContract' newSize
+          genNewContractIndexed _ = genContract' newSize
 
           genNewContract = genContract' newSize
 

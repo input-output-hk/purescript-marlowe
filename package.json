@@ -22,5 +22,9 @@
   "bugs": {
     "url": "https://github.com/input-output-hk/purescript-marlowe/issues"
   },
-  "homepage": "https://github.com/input-output-hk/purescript-marlowe#readme"
+  "homepage": "https://github.com/input-output-hk/purescript-marlowe#readme",
+  "dependencies": {
+    "big-integer": "^1.6.51",
+    "json-bigint": "^1.0.0"
+  }
 }
