@@ -18,6 +18,7 @@ import Language.Marlowe.Core.V1.Semantics.Types
   , ChoiceId
   , Contract
   , Input
+  , IntervalError
   , Observation
   , Party
   , Payee
@@ -68,6 +69,8 @@ testRoundtripSerializationJson typeId = case typeId of
     (Proxy :: Proxy C.TransactionOutput)
   TypeId "Core.TransactionWarning" -> roundTrip
     (Proxy :: Proxy C.TransactionWarning)
+  TypeId "Core.IntervalError" -> roundTrip
+    (Proxy :: Proxy C.IntervalError)
   TypeId "Core.Transaction" -> roundTrip (Proxy :: Proxy C.TransactionInput)
   TypeId "Extended.Timeout" -> roundTrip (Proxy :: Proxy EM.Timeout)
   TypeId "Extended.Value" -> roundTrip (Proxy :: Proxy EM.Value)
