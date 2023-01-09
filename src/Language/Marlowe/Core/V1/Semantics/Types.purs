@@ -8,11 +8,14 @@ import Control.Monad.Trans.Class (lift)
 import Data.Argonaut
   ( class DecodeJson
   , class EncodeJson
+  , Json
+  , JsonDecodeError(..)
   , decodeJson
   , encodeJson
+  , (.:)
+  , (.:?)
   )
-import Data.Argonaut.Decode.Aeson as D
-import Data.Argonaut.Encode.Aeson as E
+import Data.Argonaut.Decode.Decoders (decodeJObject, decodeString)
 import Data.Argonaut.Encode.Encoders (encodeArray)
 import Data.Argonaut.Extra
   ( array
@@ -41,8 +44,8 @@ import Data.Show.Generic (genericShow)
 import Data.String (toLower)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
-import Data.Tuple.Nested ((/\))
-import Marlowe.Time (instantDecoder, instantFromJson, instantToJson, unixEpoch)
+import Foreign.Object (Object)
+import Marlowe.Time (instantFromJson, instantToJson, unixEpoch)
 import Type.Proxy (Proxy(..))
 
 type Address = String
@@ -856,20 +859,39 @@ instance showIntervalError :: Show IntervalError where
 
 instance genericEncodeIntervalError :: EncodeJson IntervalError where
   encodeJson = case _ of
-    InvalidInterval a -> E.encodeTagged "InvalidInterval" a E.value
-    IntervalInPastError a b -> E.encodeTagged "IntervalInPastError"
-      (unwrap (unInstant a) /\ b)
-      E.value
+    InvalidInterval (TimeInterval f t) -> encodeJson
+      { invalidInterval: { from: instantToJson f, to: instantToJson t }
+      }
+    IntervalInPastError m (TimeInterval f t) -> encodeJson
+      { intervalInPastError:
+          { from: instantToJson f
+          , to: instantToJson t
+          , minTime: instantToJson m
+          }
+      }
 
 instance genericDecodeJsonIntervalError :: DecodeJson IntervalError where
-  decodeJson =
-    D.decode
-      $ D.sumType "IntervalError"
-      $ Map.fromFoldable
-          [ "InvalidInterval" /\ D.content (InvalidInterval <$> D.value)
-          , "IntervalInPastError" /\ D.content
-              (IntervalInPastError <$> instantDecoder <*> D.value)
-          ]
+  decodeJson :: Json -> Either JsonDecodeError IntervalError
+  decodeJson json = do
+    obj <- decodeJObject json
+    mInvalidInterval <- obj .:? "invalidInterval"
+    mIntervalInPastError <- obj .:? "intervalInPastError"
+    case mInvalidInterval, mIntervalInPastError of
+      Just o, Nothing -> decodeInvalidInterval o
+      Nothing, Just o -> decodeIntervalInThePast o
+      _, _ -> Left $ TypeMismatch "IntervalError"
+
+    where
+    decodeInvalidInterval :: Object Json -> Either JsonDecodeError IntervalError
+    decodeInvalidInterval o = do
+      f <- instantFromJson =<< o .: "from"
+      t <- instantFromJson =<< o .: "to"
+      pure $ InvalidInterval $ TimeInterval f t
+    decodeIntervalInThePast o = do
+      f <- instantFromJson =<< o .: "from"
+      t <- instantFromJson =<< o .: "to"
+      m <- instantFromJson =<< o .: "minTime"
+      pure $ IntervalInPastError m $ TimeInterval f t
 
 data IntervalResult
   = IntervalTrimmed Environment State
@@ -905,10 +927,10 @@ instance DecodeJson Payment where
   decodeJson =
     object "Payment" do
       amount <- requireProp "amount"
-      account <- requireProp "payment_from"
+      payment_from <- requireProp "payment_from"
       payee <- requireProp "to"
       token <- requireProp "token"
-      pure $ Just $ Payment amount account payee token
+      pure $ Just $ Payment payment_from payee token amount
 
 data ReduceEffect
   = ReduceWithPayment Payment
@@ -1122,24 +1144,25 @@ instance showTransactionError :: Show TransactionError where
 
 instance genericEncodeTransactionError :: EncodeJson TransactionError where
   encodeJson = case _ of
-    TEAmbiguousTimeIntervalError -> E.encodeTagged
-      "TEAmbiguousTimeIntervalError"
-      unit
-      E.null
-    TEApplyNoMatchError -> E.encodeTagged "TEApplyNoMatchError" unit E.null
-    TEIntervalError e -> E.encodeTagged "TEIntervalError" e E.value
-    TEUselessTransaction -> E.encodeTagged "TEUselessTransaction" unit E.null
+    TEAmbiguousTimeIntervalError -> encodeJson "TEAmbiguousTimeIntervalError"
+    TEApplyNoMatchError -> encodeJson "TEApplyNoMatchError"
+    TEUselessTransaction -> encodeJson "TEUselessTransaction"
+    TEIntervalError i -> encodeJson
+      { error: "TEIntervalError", context: encodeJson i }
 
 instance genericDecodeJsonTransactionError :: DecodeJson TransactionError where
-  decodeJson =
-    D.decode
-      $ D.sumType "TransactionError"
-      $ Map.fromFoldable
-          [ "TEAmbiguousTimeIntervalError" /\ pure TEAmbiguousTimeIntervalError
-          , "TEApplyNoMatchError" /\ pure TEApplyNoMatchError
-          , "TEIntervalError" /\ D.content (TEIntervalError <$> D.value)
-          , "TEUselessTransaction" /\ pure TEUselessTransaction
-          ]
+  decodeJson json = decodeStringBased <|> decodeIntervalError
+    where
+    decodeStringBased = do
+      str <- decodeString json
+      case str of
+        "TEAmbiguousTimeIntervalError" -> pure TEAmbiguousTimeIntervalError
+        "TEApplyNoMatchError" -> pure TEApplyNoMatchError
+        "TEUselessTransaction" -> pure TEUselessTransaction
+        _ -> Left $ TypeMismatch "TransactionError"
+    decodeIntervalError = do
+      obj <- decodeJObject json
+      TEIntervalError <$> obj .: "context"
 
 newtype TransactionInput = TransactionInput
   { interval :: TimeInterval
