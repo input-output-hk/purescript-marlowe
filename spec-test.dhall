@@ -18,6 +18,7 @@ in  { name = "marlowe-spec-cli"
           , "coroutines"
           , "aff-coroutines"
           , "spec"
+          , "lcg"
           ]
     , packages = ./packages.dhall
     , sources = [ "src/**/*.purs", "spec-test/**/*.purs" ]
