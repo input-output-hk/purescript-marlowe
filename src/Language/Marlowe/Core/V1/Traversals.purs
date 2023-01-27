@@ -2,15 +2,11 @@ module Language.Marlowe.Core.V1.Traversals where
 
 import Prelude
 
-import Control.Applicative (class Applicative, class Functor, (<$>), (<*>))
-import Control.Bind (pure)
-import Control.Monad (class Monad, (>=>))
 import Data.Traversable (for)
 import Language.Marlowe.Core.V1.Semantics.Types
   ( Case(..)
   , Contract(..)
   , Observation(..)
-  , Timeout(..)
   , Value(..)
   )
 
