@@ -108,7 +108,7 @@ traverseValue (Visitor { onValue, onObservation }) = case _ of
     <*> onValue val2
 
 -- | Given non recursive vistor create a recursive top to bottom one.
-topDownVisitor :: forall f. Monad f => Visitor f -> Visitor f
+topDownVisitor :: forall m. Monad m => Visitor m -> Visitor m
 topDownVisitor (Visitor { onContract, onValue, onCase, onObservation }) = do
   let
     visitor' = Visitor
@@ -120,18 +120,18 @@ topDownVisitor (Visitor { onContract, onValue, onCase, onObservation }) = do
   visitor'
 
 rewriteContractTopDown
-  :: forall f. Monad f => Visitor f -> Contract -> f Contract
+  :: forall m. Monad m => Visitor m -> Contract -> m Contract
 rewriteContractTopDown visitor contract = do
   let
     Visitor { onContract } = topDownVisitor visitor
   onContract contract
 
 -- | Flipped version which allows traversing using `for` like infix syntax.
-forContractTopDown :: forall f. Monad f => Contract -> Visitor f -> f Contract
+forContractTopDown :: forall m. Monad m => Contract -> Visitor m -> m Contract
 forContractTopDown = flip rewriteContractTopDown
 
 -- | Given non recursive vistor create a recursive bottom to top one.
-bottomUpVisitor :: forall f. Monad f => Visitor f -> Visitor f
+bottomUpVisitor :: forall m. Monad m => Visitor m -> Visitor m
 bottomUpVisitor (Visitor { onContract, onValue, onCase, onObservation }) = do
   let
     visitor' = Visitor
@@ -143,12 +143,12 @@ bottomUpVisitor (Visitor { onContract, onValue, onCase, onObservation }) = do
   visitor'
 
 rewriteContractBottomUp
-  :: forall f. Monad f => Visitor f -> Contract -> f Contract
+  :: forall m. Monad m => Visitor m -> Contract -> m Contract
 rewriteContractBottomUp visitor contract = do
   let
     Visitor { onContract } = bottomUpVisitor visitor
   onContract contract
 
 -- | Flipped version which allows traversing using `for` like or infix syntax.
-forContractBottomUp :: forall f. Monad f => Contract -> Visitor f -> f Contract
+forContractBottomUp :: forall m. Monad m => Contract -> Visitor m -> m Contract
 forContractBottomUp = flip rewriteContractBottomUp

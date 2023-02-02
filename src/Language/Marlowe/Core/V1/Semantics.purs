@@ -7,6 +7,7 @@ import Data.BigInt.Argonaut as BigInt
 import Data.DateTime.Instant (Instant, unInstant)
 import Data.Foldable (class Foldable, any, foldl)
 import Data.FoldableWithIndex (foldMapWithIndex)
+import Data.Identity (Identity)
 import Data.Int (round)
 import Data.Lens (over, set, to, view)
 import Data.List (List(..), fromFoldable, reverse, (:))
@@ -55,6 +56,11 @@ import Language.Marlowe.Core.V1.Semantics.Types
   , asset
   , ivFrom
   , ivTo
+  )
+import Language.Marlowe.Core.V1.Traversals
+  ( Visitor(..)
+  , forContractBottomUp
+  , forContractTopDown
   )
 import Marlowe.Time (unixEpoch)
 
@@ -182,6 +188,36 @@ evalObservation env state obs =
       ValueEQ lhs rhs -> evalVal lhs == evalVal rhs
       TrueObs -> true
       FalseObs -> false
+
+-- | Reduce a Contract
+reduceContract :: Contract -> Contract
+reduceContract contract =
+  let
+    visitor = Visitor { onCase, onContract, onObservation, onValue }
+    (runReduce :: Identity Contract) = forContractTopDown contract visitor >>=
+      flip forContractBottomUp visitor
+  in
+    unwrap runReduce
+  where
+  onCase = pure
+  onContract = pure
+  onObservation = pure
+  onValue (AddValue a b) | b == zero = pure a
+  onValue (AddValue a b) | a == zero = pure b
+  onValue (SubValue a b) | b == zero = pure a
+  onValue (SubValue a b) | a == zero = pure $ NegValue b
+  onValue (MulValue a b) | b == one = pure a
+  onValue (MulValue a b) | a == one = pure b
+  onValue (DivValue a b) | b == one = pure a
+
+  onValue (MulValue a (DivValue b c)) | a == c = pure b
+  onValue (MulValue (DivValue b c) a) | a == c = pure b
+  onValue (DivValue (MulValue b c) a) | a == c = pure b
+
+  onValue v = pure v
+
+  one = Constant $ BigInt.fromInt 1
+  zero = Constant $ BigInt.fromInt 0
 
 -- | Pick the first account with money in it
 refundOne :: Accounts -> Maybe (Party /\ Token /\ BigInt /\ Accounts)
