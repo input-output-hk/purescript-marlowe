@@ -29,7 +29,7 @@ traverseContract
   :: forall f. Applicative f => Visitor f -> Contract -> f Contract
 traverseContract (Visitor { onContract, onValue, onObservation, onCase }) =
   case _ of
-    Close -> onContract Close
+    Close -> pure Close
     Pay accId payee token value contract -> Pay accId payee token
       <$> onValue value
       <*> onContract contract
