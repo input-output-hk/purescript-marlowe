@@ -59,8 +59,8 @@ import Language.Marlowe.Core.V1.Semantics.Types
   )
 import Language.Marlowe.Core.V1.Traversals
   ( Visitor(..)
-  , forContractBottomUp
-  , forContractTopDown
+  , rewriteContractBottomUp
+  , rewriteContractTopDown
   )
 import Marlowe.Time (unixEpoch)
 
@@ -192,27 +192,28 @@ evalObservation env state obs =
 -- | Reduce a Contract
 reduceContract :: Contract -> Contract
 reduceContract contract =
-  let
-    visitor = Visitor { onCase, onContract, onObservation, onValue }
-    (runReduce :: Identity Contract) = forContractTopDown contract visitor >>=
-      flip forContractBottomUp visitor
-  in
-    unwrap runReduce
+  let (ident :: Identity Contract) = reduceContract' contract in unwrap ident
+
+reduceContract' :: forall m. Monad m => Contract -> m Contract
+reduceContract' = rewriteContractTopDown visitor >=> rewriteContractBottomUp
+  visitor
   where
+  visitor = Visitor { onCase, onContract, onObservation, onValue }
+
   onCase = pure
   onContract = pure
   onObservation = pure
-  onValue (AddValue a b) | b == zero = pure a
-  onValue (AddValue a b) | a == zero = pure b
-  onValue (SubValue a b) | b == zero = pure a
-  onValue (SubValue a b) | a == zero = pure $ NegValue b
-  onValue (MulValue a b) | b == one = pure a
-  onValue (MulValue a b) | a == one = pure b
-  onValue (DivValue a b) | b == one = pure a
+  onValue (AddValue a b) | b == zero = onValue a
+  onValue (AddValue a b) | a == zero = onValue b
+  onValue (SubValue a b) | b == zero = onValue a
+  onValue (SubValue a b) | a == zero = onValue $ NegValue b
+  onValue (MulValue a b) | b == one = onValue a
+  onValue (MulValue a b) | a == one = onValue b
+  onValue (DivValue a b) | b == one = onValue a
 
-  onValue (MulValue a (DivValue b c)) | a == c = pure b
-  onValue (MulValue (DivValue b c) a) | a == c = pure b
-  onValue (DivValue (MulValue b c) a) | a == c = pure b
+  onValue (MulValue a (DivValue b c)) | a == c = onValue b
+  onValue (MulValue (DivValue b c) a) | a == c = onValue b
+  onValue (DivValue (MulValue b c) a) | a == c = onValue b
 
   onValue v = pure v
 
