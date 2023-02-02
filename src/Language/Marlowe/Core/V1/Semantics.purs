@@ -218,7 +218,9 @@ reduceContract' = rewriteContractTopDown visitor >=> rewriteContractBottomUp
   onValue (DivValue a _) | a == zero = pure zero
   onValue (MulValue a (DivValue b c)) | a == c = onValue b
   onValue (MulValue (DivValue b c) a) | a == c = onValue b
+  onValue (MulValue (DivValue b c) a) | a == b = onValue c
   onValue (DivValue (MulValue b c) a) | a == c = onValue b
+  onValue (DivValue (MulValue b c) a) | a == b = onValue c
 
   onValue v = pure v
 
