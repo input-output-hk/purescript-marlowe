@@ -203,14 +203,19 @@ reduceContract' = rewriteContractTopDown visitor >=> rewriteContractBottomUp
   onCase = pure
   onContract = pure
   onObservation = pure
+
+  onValue (NegValue (NegValue a)) = onValue a
+  onValue (NegValue (SubValue a b)) = onValue $ SubValue b a
   onValue (AddValue a b) | b == zero = onValue a
   onValue (AddValue a b) | a == zero = onValue b
   onValue (SubValue a b) | b == zero = onValue a
   onValue (SubValue a b) | a == zero = onValue $ NegValue b
   onValue (MulValue a b) | b == one = onValue a
   onValue (MulValue a b) | a == one = onValue b
+  onValue (MulValue _ b) | b == zero = pure zero
+  onValue (MulValue a _) | a == zero = pure zero
   onValue (DivValue a b) | b == one = onValue a
-
+  onValue (DivValue a _) | a == zero = pure zero
   onValue (MulValue a (DivValue b c)) | a == c = onValue b
   onValue (MulValue (DivValue b c) a) | a == c = onValue b
   onValue (DivValue (MulValue b c) a) | a == c = onValue b

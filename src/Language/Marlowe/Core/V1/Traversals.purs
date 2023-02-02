@@ -4,7 +4,8 @@ import Prelude
 
 import Data.Traversable (for)
 import Language.Marlowe.Core.V1.Semantics.Types
-  ( Case(..)
+  ( Action(..)
+  , Case(..)
   , Contract(..)
   , Observation(..)
   , Value(..)
@@ -48,9 +49,16 @@ traverseContract (Visitor { onContract, onValue, onObservation, onCase }) =
       <$> onObservation obs
       <*> onContract contract
 
-traverseCase :: forall f. Functor f => Visitor f -> Case -> f Case
-traverseCase (Visitor { onContract }) (Case action contract) =
-  Case action <$> onContract contract
+traverseCase :: forall f. Applicative f => Visitor f -> Case -> f Case
+traverseCase
+  (Visitor { onContract, onValue })
+  (Case (Deposit accountId party token value) contract) =
+  let
+    deposit = Deposit accountId party token <$> onValue value
+  in
+    Case <$> deposit <*> onContract contract
+traverseCase (Visitor { onContract }) (Case action contract) = Case action <$>
+  onContract contract
 
 traverseObservation
   :: forall f. Applicative f => Visitor f -> Observation -> f Observation
@@ -111,13 +119,13 @@ traverseValue (Visitor { onValue, onObservation }) = case _ of
 topDownVisitor :: forall m. Monad m => Visitor m -> Visitor m
 topDownVisitor (Visitor { onContract, onValue, onCase, onObservation }) = do
   let
-    visitor' = Visitor
-      { onContract: \c -> onContract c >>= traverseContract visitor'
-      , onValue: \c -> onValue c >>= traverseValue visitor'
-      , onCase: \c -> onCase c >>= traverseCase visitor'
-      , onObservation: \c -> onObservation c >>= traverseObservation visitor'
+    visitor = Visitor
+      { onContract: \c -> onContract c >>= traverseContract visitor
+      , onValue: \c -> onValue c >>= traverseValue visitor
+      , onCase: \c -> onCase c >>= traverseCase visitor
+      , onObservation: \c -> onObservation c >>= traverseObservation visitor
       }
-  visitor'
+  visitor
 
 rewriteContractTopDown
   :: forall m. Monad m => Visitor m -> Contract -> m Contract
@@ -134,13 +142,13 @@ forContractTopDown = flip rewriteContractTopDown
 bottomUpVisitor :: forall m. Monad m => Visitor m -> Visitor m
 bottomUpVisitor (Visitor { onContract, onValue, onCase, onObservation }) = do
   let
-    visitor' = Visitor
-      { onContract: \c -> traverseContract visitor' c >>= onContract
-      , onValue: \c -> traverseValue visitor' c >>= onValue
-      , onCase: \c -> traverseCase visitor' c >>= onCase
-      , onObservation: \c -> traverseObservation visitor' c >>= onObservation
+    visitor = Visitor
+      { onContract: \c -> traverseContract visitor c >>= onContract
+      , onValue: \c -> traverseValue visitor c >>= onValue
+      , onCase: \c -> traverseCase visitor c >>= onCase
+      , onObservation: \c -> traverseObservation visitor c >>= onObservation
       }
-  visitor'
+  visitor
 
 rewriteContractBottomUp
   :: forall m. Monad m => Visitor m -> Contract -> m Contract
