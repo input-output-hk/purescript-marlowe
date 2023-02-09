@@ -35,6 +35,7 @@ import Language.Marlowe.Core.V1.Semantics.Types
   , Contract(..)
   , CurrencySymbol
   , Input(..)
+  , InputContent(..)
   , Observation(..)
   , Party(..)
   , Payee(..)
@@ -414,12 +415,12 @@ genChoiceIdValue = do
   choiceOwner <- genPartyValue
   pure $ S.ChoiceId choiceName choiceOwner
 
-genInput
+genInputContent
   :: forall m
    . MonadGen m
   => MonadRec m
-  => m S.Input
-genInput =
+  => m S.InputContent
+genInputContent =
   oneOf
     $
       ( IDeposit <$> genPartyValue <*> genPartyValue <*> genTokenValue <*>
@@ -430,10 +431,34 @@ genInput =
           , pure INotify
           ]
 
+genInput
+  :: forall m
+   . MonadGen m
+  => MonadRec m
+  => Lazy (m Contract)
+  => Lazy (m Observation)
+  => Lazy (m Value)
+  => m S.Input
+genInput =
+  oneOf
+    $
+      ( NormalInput <$> genInputContent
+      )
+        :|
+          [ do
+              contract <- defer $ \_ -> genContract
+              inputContent <- genInputContent
+              hash <- genBase16 -- FIXME: compute hash of contract
+              pure $ MerkleizedInput inputContent hash contract
+          ]
+
 genTransactionInput
   :: forall m
    . MonadGen m
   => MonadRec m
+  => Lazy (m Contract)
+  => Lazy (m Observation)
+  => Lazy (m Value)
   => m S.TransactionInput
 genTransactionInput = do
   interval <- genTimeInterval genInstant

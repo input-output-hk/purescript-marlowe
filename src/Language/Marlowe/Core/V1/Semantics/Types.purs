@@ -12,10 +12,15 @@ import Data.Argonaut
   , JsonDecodeError(..)
   , decodeJson
   , encodeJson
+  , jsonNull
   , (.:)
   , (.:?)
   )
-import Data.Argonaut.Decode.Decoders (decodeJObject, decodeString)
+import Data.Argonaut.Core (fromObject, toObject)
+import Data.Argonaut.Decode.Decoders
+  ( decodeJObject
+  , decodeString
+  )
 import Data.Argonaut.Encode.Encoders (encodeArray)
 import Data.Argonaut.Extra
   ( array
@@ -44,7 +49,7 @@ import Data.Show.Generic (genericShow)
 import Data.String (toLower)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (Object)
+import Foreign.Object (Object, union)
 import Marlowe.Time (instantFromJson, instantToJson, unixEpoch)
 import Type.Proxy (Proxy(..))
 
@@ -622,7 +627,9 @@ instance decodeJsonPayee :: DecodeJson Payee where
 instance showPayee :: Show Payee where
   show v = genericShow v
 
-data Case = Case Action Contract
+data Case
+  = Case Action Contract
+  | MerkleizedCase Action String
 
 derive instance genericCase :: Generic Case _
 
@@ -636,15 +643,31 @@ instance encodeJsonCase :: EncodeJson Case where
       { case: action
       , then: cont
       }
+  encodeJson (MerkleizedCase action hash) =
+    encodeJson
+      { case: action
+      , merkleized_then: hash
+      }
 
 instance decodeJsonCase :: DecodeJson Case where
   decodeJson =
-    object "Case"
-      $ Just
-          <$> (Case <$> requireProp "case" <*> requireProp "then")
+    object "Case" do
+      _case <- getProp "case"
+      _then <- getProp "then"
+      merkleized_then <- getProp "merkleized_then"
+      pure
+        $ (Case <$> _case <*> _then)
+            <|> (MerkleizedCase <$> _case <*> merkleized_then)
 
 instance showCase :: Show Case where
   show (Case action contract) = "Case " <> show action <> " " <> show contract
+  show (MerkleizedCase action hash) = "MerkleizedCase " <> show action <> " " <>
+    show hash
+
+-- | Extract the @Action@ from a @Case@.
+getAction :: Case -> Action
+getAction (Case action _) = action
+getAction (MerkleizedCase action _) = action
 
 data Contract
   = Close
@@ -786,21 +809,21 @@ instance showEnvironment :: Show Environment where
 _timeInterval :: Lens' Environment TimeInterval
 _timeInterval = _Newtype <<< prop (Proxy :: _ "timeInterval")
 
-data Input
+data InputContent
   = IDeposit AccountId Party Token BigInt
   | IChoice ChoiceId ChosenNum
   | INotify
 
-derive instance genericInput :: Generic Input _
+derive instance genericInputContent :: Generic InputContent _
 
-derive instance eqInput :: Eq Input
+derive instance eqInputContent :: Eq InputContent
 
-derive instance ordInput :: Ord Input
+derive instance ordInputContent :: Ord InputContent
 
-instance showInput :: Show Input where
+instance showInputContent :: Show InputContent where
   show v = genericShow v
 
-instance encodeJsonInput :: EncodeJson Input where
+instance encodeJsonInputContent :: EncodeJson InputContent where
   encodeJson (IDeposit accId party tok amount) =
     encodeJson
       { input_from_party: party
@@ -815,7 +838,7 @@ instance encodeJsonInput :: EncodeJson Input where
       }
   encodeJson INotify = encodeJson "input_notify"
 
-instance decodeJsonInput :: DecodeJson Input where
+instance decodeJsonInputContent :: DecodeJson InputContent where
   decodeJson =
     caseConstantFrom
       (Map.singleton "input_notify" INotify)
@@ -838,6 +861,50 @@ instance decodeJsonInput :: DecodeJson Input where
                 <*> thatDeposits
             )
               <|> (IChoice <$> forChoiceId <*> inputThatChoosesNum)
+
+-- | Input to a contract, which may include the merkleized continuation
+--   of the contract and its hash.
+data Input
+  = NormalInput InputContent
+  | MerkleizedInput InputContent String Contract
+
+derive instance genericInput :: Generic Input _
+
+derive instance eqInput :: Eq Input
+
+derive instance ordInput :: Ord Input
+
+instance showInput :: Show Input where
+  show v = genericShow v
+
+instance encodeJsonInput :: EncodeJson Input where
+  encodeJson (NormalInput content) = encodeJson content
+  encodeJson (MerkleizedInput content hash continuation) = fromMaybe jsonNull $
+    let
+      inputContent = encodeJson content
+      merkleized = encodeJson
+        { "merkleized_continuation": encodeJson continuation
+        , "continuation_hash": encodeJson hash
+        }
+    in
+      fromObject <$> (union <$> toObject inputContent <*> toObject merkleized)
+
+instance decodeJsonInput :: DecodeJson Input where
+  decodeJson json = do
+    inputContent <- decodeJson json
+    obj <- decodeJObject json
+    hash <- obj .:? "continuation_hash"
+    continuation <- obj .:? "merkleized_continuation"
+    case hash, continuation of
+      Just hash', Just continuation' -> pure $ MerkleizedInput inputContent
+        hash'
+        continuation'
+      _, _ -> pure $ NormalInput inputContent
+
+-- | Extract the content of input.
+getInputContent :: Input -> InputContent
+getInputContent (NormalInput inputContent) = inputContent
+getInputContent (MerkleizedInput inputContent _ _) = inputContent
 
 -- Processing of time interval
 data IntervalError
@@ -1000,6 +1067,7 @@ instance showApplyWarning :: Show ApplyWarning where
 data ApplyResult
   = Applied ApplyWarning State Contract
   | ApplyNoMatchError
+  | ApplyHashMismatch
 
 derive instance genericApplyResult :: Generic ApplyResult _
 
@@ -1017,6 +1085,7 @@ data ApplyAllResult
       Contract
   | ApplyAllNoMatchError
   | ApplyAllAmbiguousTimeIntervalError
+  | ApplyAllHashMismatch
 
 derive instance genericApplyAllResult :: Generic ApplyAllResult _
 
@@ -1128,6 +1197,7 @@ data TransactionError
   | TEApplyNoMatchError
   | TEIntervalError IntervalError
   | TEUselessTransaction
+  | TEHashMismatch
 
 derive instance genericTransactionError :: Generic TransactionError _
 
@@ -1141,6 +1211,7 @@ instance showTransactionError :: Show TransactionError where
     "At least one of the inputs in the transaction is not allowed by the contract"
   show (TEIntervalError err) = show err
   show TEUselessTransaction = "Useless Transaction"
+  show TEHashMismatch = "Merkleization Hash mismatch"
 
 instance genericEncodeTransactionError :: EncodeJson TransactionError where
   encodeJson = case _ of
@@ -1149,6 +1220,7 @@ instance genericEncodeTransactionError :: EncodeJson TransactionError where
     TEUselessTransaction -> encodeJson "TEUselessTransaction"
     TEIntervalError i -> encodeJson
       { error: "TEIntervalError", context: encodeJson i }
+    TEHashMismatch -> encodeJson "TEHashMismatch"
 
 instance genericDecodeJsonTransactionError :: DecodeJson TransactionError where
   decodeJson json = decodeStringBased <|> decodeIntervalError
@@ -1159,6 +1231,7 @@ instance genericDecodeJsonTransactionError :: DecodeJson TransactionError where
         "TEAmbiguousTimeIntervalError" -> pure TEAmbiguousTimeIntervalError
         "TEApplyNoMatchError" -> pure TEApplyNoMatchError
         "TEUselessTransaction" -> pure TEUselessTransaction
+        "TEHashMismatch" -> pure TEHashMismatch
         _ -> Left $ TypeMismatch "TransactionError"
     decodeIntervalError = do
       obj <- decodeJObject json
@@ -1311,15 +1384,18 @@ instance hasTimeoutContract :: HasTimeout Contract where
     [ contractTrue, contractFalse ]
   timeouts (When cases timeout contract) =
     timeouts
-      [ timeouts cases
+      [ timeouts $ map
+          ( case _ of
+              (Case _ continuation) -> timeouts continuation
+              (MerkleizedCase _ _) -> Timeouts
+                { maxTime: timeout, minTime: Nothing } -- FIXME: timeout of merkleized contracts?
+          )
+          cases
       , Timeouts { maxTime: timeout, minTime: Just timeout }
       , timeouts contract
       ]
   timeouts (Let _ _ contract) = timeouts contract
   timeouts (Assert _ contract) = timeouts contract
-
-instance hasTimeoutCase :: HasTimeout Case where
-  timeouts (Case _ contract) = timeouts contract
 
 instance hasTimeoutArrayOfTimeouts :: HasTimeout (Array Timeouts) where
   timeouts ts =
