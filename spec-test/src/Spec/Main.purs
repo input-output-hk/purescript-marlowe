@@ -8,7 +8,11 @@ import Data.Either (Either(..))
 import Data.Maybe (fromMaybe, maybe)
 import Effect (Effect)
 import Effect.Console (log)
-import Language.Marlowe.Core.V1.Semantics (computeTransaction, playTrace) as C
+import Language.Marlowe.Core.V1.Semantics
+  ( computeTransaction
+  , evalValue
+  , playTrace
+  ) as C
 import Node.Process (stdin)
 import Random.LCG (randomSeed)
 import Spec.GenerateRandomValue (generateRandomValue)
@@ -41,6 +45,11 @@ handleJsonRequest req = case decodeJson req of
       $ RequestResponse
       $ encodeJson
       $ C.playTrace initialTime contract inputs
+  Right (EvalValue env state value) ->
+    pure
+      $ RequestResponse
+      $ encodeJson
+      $ C.evalValue env state value
 
 invalidJsonRequest :: String -> Response Json
 invalidJsonRequest = InvalidRequest
