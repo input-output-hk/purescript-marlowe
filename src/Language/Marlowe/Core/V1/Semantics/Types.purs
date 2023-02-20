@@ -12,15 +12,13 @@ import Data.Argonaut
   , JsonDecodeError(..)
   , decodeJson
   , encodeJson
+  , isObject
   , jsonNull
   , (.:)
   , (.:?)
   )
 import Data.Argonaut.Core (fromObject, toObject)
-import Data.Argonaut.Decode.Decoders
-  ( decodeJObject
-  , decodeString
-  )
+import Data.Argonaut.Decode.Decoders (decodeJObject, decodeString)
 import Data.Argonaut.Encode.Encoders (encodeArray)
 import Data.Argonaut.Extra
   ( array
@@ -890,7 +888,7 @@ instance encodeJsonInput :: EncodeJson Input where
       fromObject <$> (union <$> toObject inputContent <*> toObject merkleized)
 
 instance decodeJsonInput :: DecodeJson Input where
-  decodeJson json = do
+  decodeJson json | isObject json = do
     inputContent <- decodeJson json
     obj <- decodeJObject json
     hash <- obj .:? "continuation_hash"
@@ -900,6 +898,7 @@ instance decodeJsonInput :: DecodeJson Input where
         hash'
         continuation'
       _, _ -> pure $ NormalInput inputContent
+  decodeJson json = decodeJson json >>= pure <<< NormalInput
 
 -- | Extract the content of input.
 getInputContent :: Input -> InputContent
