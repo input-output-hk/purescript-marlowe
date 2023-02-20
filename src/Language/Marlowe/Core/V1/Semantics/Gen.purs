@@ -448,7 +448,7 @@ genInput =
           [ do
               contract <- defer $ \_ -> genContract
               inputContent <- genInputContent
-              hash <- genBase16 -- FIXME: compute hash of contract
+              hash <- genBase16 -- TODO: compute the hash
               pure $ MerkleizedInput inputContent hash contract
           ]
 

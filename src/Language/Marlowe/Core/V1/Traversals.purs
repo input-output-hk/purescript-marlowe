@@ -59,8 +59,7 @@ traverseCase
     Case <$> deposit <*> onContract contract
 traverseCase (Visitor { onContract }) (Case action contract) = Case action <$>
   onContract contract
--- FIXME: traversals with Merkleized contracts need continuations
--- (or move Traversals and Folds to Extended Marlowe?)
+-- contracts need to be de-merkleized for traversial
 traverseCase
   (Visitor { onValue })
   (MerkleizedCase (Deposit accountId party token value) hash) =

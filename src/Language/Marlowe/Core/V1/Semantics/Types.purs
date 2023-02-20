@@ -1387,7 +1387,7 @@ instance hasTimeoutContract :: HasTimeout Contract where
           ( case _ of
               (Case _ continuation) -> timeouts continuation
               (MerkleizedCase _ _) -> Timeouts
-                { maxTime: timeout, minTime: Nothing } -- FIXME: timeout of merkleized contracts?
+                { maxTime: timeout, minTime: Nothing }
           )
           cases
       , Timeouts { maxTime: timeout, minTime: Just timeout }
