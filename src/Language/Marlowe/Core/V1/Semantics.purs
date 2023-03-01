@@ -2,7 +2,7 @@ module Language.Marlowe.Core.V1.Semantics where
 
 import Prelude
 
-import Data.BigInt.Argonaut (BigInt, fromInt)
+import Data.BigInt.Argonaut (BigInt, fromInt, quot)
 import Data.BigInt.Argonaut as BigInt
 import Data.DateTime.Instant (Instant, unInstant)
 import Data.Foldable (class Foldable, any, foldl)
@@ -148,7 +148,7 @@ evalValue env state value =
           if d == fromInt 0 then
             fromInt 0
           else
-            n / d
+            n `quot` d
       ChoiceValue choiceId -> fromMaybe zero $ Map.lookup choiceId
         (unwrap state).choices
       TimeIntervalStart ->
