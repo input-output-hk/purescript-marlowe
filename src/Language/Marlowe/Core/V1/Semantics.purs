@@ -8,7 +8,6 @@ import Data.DateTime.Instant (Instant, unInstant)
 import Data.Foldable (class Foldable, any, foldl)
 import Data.FoldableWithIndex (foldMapWithIndex)
 import Data.Generic.Rep (class Generic)
-import Data.Identity (Identity)
 import Data.Int (round)
 import Data.Lens (over, set, to, view)
 import Data.List (List(..), fromFoldable, reverse, (:))
@@ -61,11 +60,6 @@ import Language.Marlowe.Core.V1.Semantics.Types
   , getInputContent
   , ivFrom
   , ivTo
-  )
-import Language.Marlowe.Core.V1.Traversals
-  ( Visitor(..)
-  , rewriteContractBottomUp
-  , rewriteContractTopDown
   )
 import Marlowe.Time (unixEpoch)
 
@@ -193,44 +187,6 @@ evalObservation env state obs =
       ValueEQ lhs rhs -> evalVal lhs == evalVal rhs
       TrueObs -> true
       FalseObs -> false
-
--- | Reduce a Contract
-reduceContract :: Contract -> Contract
-reduceContract contract =
-  let (ident :: Identity Contract) = reduceContract' contract in unwrap ident
-
-reduceContract' :: forall m. Monad m => Contract -> m Contract
-reduceContract' = rewriteContractTopDown visitor >=> rewriteContractBottomUp
-  visitor
-  where
-  visitor = Visitor { onCase, onContract, onObservation, onValue }
-
-  onCase = pure
-  onContract = pure
-  onObservation = pure
-
-  onValue (NegValue (NegValue a)) = onValue a
-  onValue (NegValue (SubValue a b)) = onValue $ SubValue b a
-  onValue (AddValue a b) | b == zero = onValue a
-  onValue (AddValue a b) | a == zero = onValue b
-  onValue (SubValue a b) | b == zero = onValue a
-  onValue (SubValue a b) | a == zero = onValue $ NegValue b
-  onValue (MulValue a b) | b == one = onValue a
-  onValue (MulValue a b) | a == one = onValue b
-  onValue (MulValue _ b) | b == zero = pure zero
-  onValue (MulValue a _) | a == zero = pure zero
-  onValue (DivValue a b) | b == one = onValue a
-  onValue (DivValue a _) | a == zero = pure zero
-  onValue (MulValue a (DivValue b c)) | a == c = onValue b
-  onValue (MulValue (DivValue b c) a) | a == c = onValue b
-  onValue (MulValue (DivValue b c) a) | a == b = onValue c
-  onValue (DivValue (MulValue b c) a) | a == c = onValue b
-  onValue (DivValue (MulValue b c) a) | a == b = onValue c
-
-  onValue v = pure v
-
-  one = Constant $ BigInt.fromInt 1
-  zero = Constant $ BigInt.fromInt 0
 
 -- | Pick the first account with money in it
 refundOne :: Accounts -> Maybe (Party /\ Token /\ BigInt /\ Accounts)

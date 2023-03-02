@@ -5,10 +5,16 @@ import Prelude
 import Control.JsonStream (createJsonStream)
 import Data.Argonaut (Json, decodeJson, encodeJson, stringify)
 import Data.Either (Either(..))
+import Data.Maybe (fromMaybe, maybe)
 import Effect (Effect)
 import Effect.Console (log)
-import Language.Marlowe.Core.V1.Semantics (computeTransaction, playTrace) as C
+import Language.Marlowe.Core.V1.Semantics
+  ( computeTransaction
+  , evalValue
+  , playTrace
+  ) as C
 import Node.Process (stdin)
+import Random.LCG (randomSeed)
 import Spec.GenerateRandomValue (generateRandomValue)
 import Spec.Request (Request(..))
 import Spec.Response (Response(..))
@@ -22,10 +28,13 @@ handleJsonRequest req = case decodeJson req of
       $ RequestResponse
       $ encodeJson
       $ testRoundtripSerializationJson typeId json
-  Right (GenerateRandomValue typeId) ->
-    RequestResponse
-      <<< encodeJson
-      <$> generateRandomValue 5 typeId
+  Right (GenerateRandomValue typeId mSize mSeed) -> do
+    let
+      size = fromMaybe 5 mSize
+    seed <- maybe randomSeed pure mSeed
+    pure $ RequestResponse
+      $ encodeJson
+      $ generateRandomValue seed size typeId
   Right (ComputeTransaction input state contract) ->
     pure
       $ RequestResponse
@@ -36,6 +45,11 @@ handleJsonRequest req = case decodeJson req of
       $ RequestResponse
       $ encodeJson
       $ C.playTrace initialTime contract inputs
+  Right (EvalValue env state value) ->
+    pure
+      $ RequestResponse
+      $ encodeJson
+      $ C.evalValue env state value
 
 invalidJsonRequest :: String -> Response Json
 invalidJsonRequest = InvalidRequest

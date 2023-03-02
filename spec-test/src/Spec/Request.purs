@@ -11,17 +11,22 @@ import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
 import Language.Marlowe.Core.V1.Semantics.Types
   ( Contract
+  , Environment
   , State
   , Timeout
   , TransactionInput
+  , Value
   ) as C
+import Random.LCG (Seed, mkSeed)
 import Spec.TypeId (TypeId)
+import Test.QuickCheck.Gen (Size)
 
 data Request transport
   = TestRoundtripSerialization TypeId transport
-  | GenerateRandomValue TypeId
+  | GenerateRandomValue TypeId (Maybe Size) (Maybe Seed)
   | ComputeTransaction C.TransactionInput C.State C.Contract
   | PlayTrace C.Timeout C.Contract (List C.TransactionInput)
+  | EvalValue C.Environment C.State C.Value
 
 instance DecodeJson (Request Json) where
   decodeJson =
@@ -33,15 +38,22 @@ instance DecodeJson (Request Json) where
       mTransactionInputs <- getProp "transactionInputs"
       mState <- getProp "state"
       mContract <- getProp "coreContract"
+      mValue <- getProp "value"
+      mEnvironment <- getProp "environment"
       mInitialTime <- bindFlipped (instant <<< Milliseconds) <$> getProp
         "initialTime"
+      mSize <- getProp "size"
+      mSeed <- bindFlipped (Just <<< mkSeed) <$> getProp "seed"
       case requestType of
-        "test-roundtrip-serialization" -> pure $
+        "test-roundtrip-serialization" -> pure
           (TestRoundtripSerialization <$> mTypeId <*> mJson)
-        "generate-random-value" -> pure $ (GenerateRandomValue <$> mTypeId)
-        "compute-transaction" -> pure $
+        "generate-random-value" -> pure
+          (GenerateRandomValue <$> mTypeId <*> pure mSize <*> pure mSeed)
+        "compute-transaction" -> pure
           (ComputeTransaction <$> mTransactionInput <*> mState <*> mContract)
-        "playtrace" -> pure $
+        "playtrace" -> pure
           (PlayTrace <$> mInitialTime <*> mContract <*> mTransactionInputs)
+        "eval-value" -> pure
+          (EvalValue <$> mEnvironment <*> mState <*> mValue)
         _ -> pure Nothing
 

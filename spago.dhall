@@ -17,7 +17,6 @@
   , "foreign-object"
   , "functions"
   , "gen"
-  , "identity"
   , "integers"
   , "json-helpers"
   , "lists"

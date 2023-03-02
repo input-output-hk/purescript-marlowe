@@ -3,7 +3,6 @@ module Language.Marlowe.Core.V1.Semantics.Types where
 import Prelude
 
 import Control.Alt ((<|>))
-import Control.Monad.Reader (ReaderT(..))
 import Control.Monad.Trans.Class (lift)
 import Data.Argonaut
   ( class DecodeJson
@@ -19,7 +18,6 @@ import Data.Argonaut
   )
 import Data.Argonaut.Core (fromObject, toObject)
 import Data.Argonaut.Decode.Decoders (decodeJObject, decodeString)
-import Data.Argonaut.Encode.Encoders (encodeArray)
 import Data.Argonaut.Extra
   ( array
   , caseConstantFrom
@@ -31,7 +29,7 @@ import Data.Argonaut.Extra
 import Data.Array (catMaybes)
 import Data.BigInt.Argonaut (BigInt)
 import Data.BigInt.Argonaut as BigInt
-import Data.DateTime.Instant (Instant, unInstant)
+import Data.DateTime.Instant (Instant)
 import Data.Either (Either(..))
 import Data.Foldable (maximum, minimum)
 import Data.Generic.Rep (class Generic)
@@ -505,15 +503,16 @@ instance showTimeInterval :: Show TimeInterval where
     <>
       ")"
 
-instance genericEncodeTimeInterval :: EncodeJson TimeInterval where
-  encodeJson (TimeInterval a b) = encodeArray
-    (encodeJson <<< unwrap <<< unInstant)
-    [ a, b ]
+instance EncodeJson TimeInterval where
+  encodeJson (TimeInterval from to) = encodeJson
+    { from: instantToJson from, to: instantToJson to }
 
-instance genericDecodeJsonTimeInterval :: DecodeJson TimeInterval where
+instance DecodeJson TimeInterval where
   decodeJson json = do
-    Tuple json1 json2 <- decodeJson json
-    TimeInterval <$> instantFromJson json1 <*> instantFromJson json2
+    obj <- decodeJObject json
+    from <- instantFromJson =<< obj .: "from"
+    to <- instantFromJson =<< obj .: "to"
+    pure $ TimeInterval from to
 
 ivFrom :: TimeInterval -> Instant
 ivFrom (TimeInterval from _) = from
@@ -803,6 +802,12 @@ derive instance ordEnvironment :: Ord Environment
 
 instance showEnvironment :: Show Environment where
   show v = genericShow v
+
+instance DecodeJson Environment where
+  decodeJson json = do
+    obj <- decodeJObject json
+    timeInterval <- decodeJson =<< obj .: "timeInterval"
+    pure $ Environment { timeInterval }
 
 _timeInterval :: Lens' Environment TimeInterval
 _timeInterval = _Newtype <<< prop (Proxy :: _ "timeInterval")
@@ -1254,27 +1259,19 @@ instance showTransactionInput :: Show TransactionInput where
 
 instance encodeTransactionInput :: EncodeJson TransactionInput where
   encodeJson
-    (TransactionInput { interval: (TimeInterval from to), inputs: txInps }) =
+    (TransactionInput { interval, inputs: txInps }) =
     encodeJson
-      { tx_interval: { from: instantToJson from, to: instantToJson to }
+      { tx_interval: interval
       , tx_inputs: txInps
       }
 
 instance decodeTransactionInput :: DecodeJson TransactionInput where
   decodeJson =
     object "TransactionInput" do
-      intervalObject <- requireProp "tx_interval"
+      interval <- requireProp "tx_interval"
       inputs <- requireProp "tx_inputs"
-      interval <-
-        ReaderT \_ ->
-          flip (object "nested TimeInterval") intervalObject
-            $ Just
-                <$>
-                  ( TimeInterval
-                      <$> ((lift <<< instantFromJson) =<< requireProp "from")
-                      <*> ((lift <<< instantFromJson) =<< requireProp "to")
-                  )
-      pure $ Just $ TransactionInput { interval, inputs: inputs }
+
+      pure $ Just $ TransactionInput { interval, inputs }
 
 data TransactionOutput
   = TransactionOutput
