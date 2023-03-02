@@ -7,12 +7,14 @@ import Data.BigInt.Argonaut as BigInt
 import Data.DateTime.Instant (Instant, unInstant)
 import Data.Foldable (class Foldable, any, foldl)
 import Data.FoldableWithIndex (foldMapWithIndex)
+import Data.Generic.Rep (class Generic)
 import Data.Int (round)
 import Data.Lens (over, set, to, view)
 import Data.List (List(..), fromFoldable, reverse, (:))
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap, wrap)
+import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested (type (/\), (/\))
 import Language.Marlowe.Core.V1.Semantics.Types
@@ -28,6 +30,7 @@ import Language.Marlowe.Core.V1.Semantics.Types
   , Contract(..)
   , Environment(..)
   , Input(..)
+  , InputContent(..)
   , IntervalError(..)
   , IntervalResult(..)
   , Money
@@ -53,6 +56,8 @@ import Language.Marlowe.Core.V1.Semantics.Types
   , _minTime
   , _timeInterval
   , asset
+  , getAction
+  , getInputContent
   , ivFrom
   , ivTo
   )
@@ -357,41 +362,75 @@ reduceContractUntilQuiescent startEnv startState startContract =
   in
     reductionLoop false startEnv startState startContract mempty mempty
 
-applyCases :: Environment -> State -> Input -> List Case -> ApplyResult
-applyCases env state input cases = case input, cases of
-  IDeposit accId1 party1 tok1 amount,
-  (Case (Deposit accId2 party2 tok2 val) cont) : rest ->
-    if
-      accId1 == accId2 && party1 == party2 && tok1 == tok2
-        && amount
-          == evalValue env state val then
-      let
-        warning =
-          if amount > zero then
-            ApplyNoWarning
-          else
-            ApplyNonPositiveDeposit party2 accId2 tok2 amount
+-- | Result of applying an action to a contract.
+data ApplyAction
+  = AppliedAction ApplyWarning State
+  | NotAppliedAction
 
-        newAccounts = addMoneyToAccount accId1 tok1 amount
-          (unwrap state).accounts
+derive instance genericApplyAction :: Generic ApplyAction _
 
-        newState = wrap ((unwrap state) { accounts = newAccounts })
-      in
-        Applied warning newState cont
-    else
-      applyCases env state input rest
-  IChoice choId1 choice, (Case (Choice choId2 bounds) cont) : rest ->
+derive instance eqApplyAction :: Eq ApplyAction
+
+instance showApplyAction :: Show ApplyAction where
+  show = genericShow
+
+-- | Try to apply a single input content to a single action.
+applyAction :: Environment -> State -> InputContent -> Action -> ApplyAction
+applyAction
+  env
+  state
+  (IDeposit accId1 party1 tok1 amount)
+  (Deposit accId2 party2 tok2 val) =
+  if
+    accId1 == accId2 && party1 == party2 && tok1 == tok2 && amount == evalValue
+      env
+      state
+      val then
+    let
+      warning =
+        if amount > zero then ApplyNoWarning
+        else ApplyNonPositiveDeposit party2 accId2 tok2 amount
+      newAccounts = addMoneyToAccount accId1 tok1 amount (unwrap state).accounts
+      newState = wrap ((unwrap state) { accounts = newAccounts })
+    in
+      AppliedAction warning newState
+  else NotAppliedAction
+applyAction _ state (IChoice choId1 choice) (Choice choId2 bounds) =
+  if choId1 == choId2 && inBounds choice bounds then
     let
       newState = over _choices (Map.insert choId1 choice) state
     in
-      if choId1 == choId2 && inBounds choice bounds then
-        Applied ApplyNoWarning newState cont
-      else
-        applyCases env state input rest
-  INotify, (Case (Notify obs) cont) : _
-    | evalObservation env state obs -> Applied ApplyNoWarning state cont
-  _, _ : rest -> applyCases env state input rest
-  _, Nil -> ApplyNoMatchError
+      AppliedAction ApplyNoWarning newState
+  else NotAppliedAction
+applyAction env state INotify (Notify obs)
+  | evalObservation env state obs = AppliedAction ApplyNoWarning state
+applyAction _ _ _ _ = NotAppliedAction
+
+-- | Try to get a continuation from a pair of Input and Case.
+getContinuation :: Input -> Case -> Maybe Contract
+getContinuation (NormalInput _) (Case _ continuation) = Just continuation
+getContinuation
+  (MerkleizedInput _ inputContinuationHash continuation)
+  (MerkleizedCase _ continuationHash) =
+  if inputContinuationHash == continuationHash then Just continuation
+  else Nothing
+getContinuation _ _ = Nothing
+
+-- | Try to apply an input to a list of cases.
+applyCases :: Environment -> State -> Input -> List Case -> ApplyResult
+applyCases env state input (headCase : tailCase) =
+  let
+    inputContent = getInputContent input :: InputContent
+    action = getAction headCase :: Action
+    maybeContinuation = getContinuation input headCase :: Maybe Contract
+  in
+    case applyAction env state inputContent action of
+      AppliedAction warning newState ->
+        case maybeContinuation of
+          Just continuation -> Applied warning newState continuation
+          Nothing -> ApplyHashMismatch
+      NotAppliedAction -> applyCases env state input tailCase
+applyCases _ _ _ Nil = ApplyNoMatchError
 
 applyInput :: Environment -> State -> Input -> Contract -> ApplyResult
 applyInput env state input (When cases _ _) = applyCases env state input
@@ -454,6 +493,7 @@ applyAllInputs startEnv startState startContract startInputs =
                   )
                   (payments <> pays)
               ApplyNoMatchError -> ApplyAllNoMatchError
+              ApplyHashMismatch -> ApplyAllHashMismatch
   in
     applyAllLoop false startEnv startState startContract startInputs mempty
       mempty
@@ -489,6 +529,7 @@ computeTransaction tx state contract =
           ApplyAllNoMatchError -> Error TEApplyNoMatchError
           ApplyAllAmbiguousTimeIntervalError -> Error
             TEAmbiguousTimeIntervalError
+          ApplyAllHashMismatch -> Error TEHashMismatch
       IntervalError error -> Error (TEIntervalError error)
 
 playTrace :: Timeout -> Contract -> List TransactionInput -> TransactionOutput

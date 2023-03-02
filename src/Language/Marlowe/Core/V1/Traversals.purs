@@ -59,6 +59,15 @@ traverseCase
     Case <$> deposit <*> onContract contract
 traverseCase (Visitor { onContract }) (Case action contract) = Case action <$>
   onContract contract
+-- contracts need to be de-merkleized for traversial
+traverseCase
+  (Visitor { onValue })
+  (MerkleizedCase (Deposit accountId party token value) hash) =
+  let
+    deposit = Deposit accountId party token <$> onValue value
+  in
+    MerkleizedCase <$> deposit <*> pure hash
+traverseCase _ merkleizedCase = pure merkleizedCase
 
 traverseObservation
   :: forall f. Applicative f => Visitor f -> Observation -> f Observation

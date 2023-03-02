@@ -99,25 +99,9 @@ instance extendedPayeeHasParties :: HasParties Extended.Payee where
   getParties (Extended.Account accountId) = getParties accountId
   getParties (Extended.Party party) = getParties party
 
-instance semanticCaseHasParties :: HasParties Semantic.Case where
-  getParties (Semantic.Case action contract) = getParties action <> getParties
-    contract
-
 instance extendedCaseHasParties :: HasParties Extended.Case where
   getParties (Extended.Case action contract) = getParties action <> getParties
     contract
-
-instance semanticContractHasParties :: HasParties Semantic.Contract where
-  getParties Semantic.Close = Set.empty
-  getParties (Semantic.Pay accId payee _ val cont) = getParties accId
-    <> getParties payee
-    <> getParties val
-    <> getParties cont
-  getParties (Semantic.If obs cont1 cont2) = getParties obs <> getParties cont1
-    <> getParties cont2
-  getParties (Semantic.When cases _ cont) = getParties cases <> getParties cont
-  getParties (Semantic.Let _ val cont) = getParties val <> getParties cont
-  getParties (Semantic.Assert obs cont) = getParties obs <> getParties cont
 
 instance extendedContractHasParties :: HasParties Extended.Contract where
   getParties Extended.Close = Set.empty
