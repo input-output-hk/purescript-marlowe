@@ -10,6 +10,7 @@ import Effect (Effect)
 import Effect.Console (log)
 import Language.Marlowe.Core.V1.Semantics
   ( computeTransaction
+  , evalObservation
   , evalValue
   , playTrace
   ) as C
@@ -50,6 +51,11 @@ handleJsonRequest req = case decodeJson req of
       $ RequestResponse
       $ encodeJson
       $ C.evalValue env state value
+  Right (EvalObservation env state observation) ->
+    pure
+      $ RequestResponse
+      $ encodeJson
+      $ C.evalObservation env state observation
 
 invalidJsonRequest :: String -> Response Json
 invalidJsonRequest = InvalidRequest
