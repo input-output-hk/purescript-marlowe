@@ -12,7 +12,9 @@ import Language.Marlowe.Core.V1.Semantics
   ( computeTransaction
   , evalObservation
   , evalValue
+  , fixInterval
   , playTrace
+  , reduceContractUntilQuiescent
   ) as C
 import Node.Process (stdin)
 import Random.LCG (randomSeed)
@@ -36,6 +38,11 @@ handleJsonRequest req = case decodeJson req of
     pure $ RequestResponse
       $ encodeJson
       $ generateRandomValue seed size typeId
+  Right (ReduceContractUntilQuiescent environment state contract) ->
+    pure
+      $ RequestResponse
+      $ encodeJson
+      $ C.reduceContractUntilQuiescent environment state contract
   Right (ComputeTransaction input state contract) ->
     pure
       $ RequestResponse
@@ -46,6 +53,11 @@ handleJsonRequest req = case decodeJson req of
       $ RequestResponse
       $ encodeJson
       $ C.playTrace initialTime contract inputs
+  Right (FixInterval interval state) ->
+    pure
+      $ RequestResponse
+      $ encodeJson
+      $ C.fixInterval interval state
   Right (EvalValue env state value) ->
     pure
       $ RequestResponse

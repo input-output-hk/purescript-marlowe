@@ -9,6 +9,7 @@ import Data.DateTime.Instant (instant)
 import Data.List (List)
 import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
+import Data.Tuple.Nested ((/\))
 import Language.Marlowe.Core.V1.Semantics.Types
   ( Contract
   , Environment
@@ -18,6 +19,7 @@ import Language.Marlowe.Core.V1.Semantics.Types
   , TransactionInput
   , Value
   ) as C
+import Language.Marlowe.Core.V1.Semantics.Types (TimeInterval(..))
 import Random.LCG (Seed, mkSeed)
 import Spec.TypeId (TypeId)
 import Test.QuickCheck.Gen (Size)
@@ -25,8 +27,10 @@ import Test.QuickCheck.Gen (Size)
 data Request transport
   = TestRoundtripSerialization TypeId transport
   | GenerateRandomValue TypeId (Maybe Size) (Maybe Seed)
+  | ReduceContractUntilQuiescent C.Environment C.State C.Contract
   | ComputeTransaction C.TransactionInput C.State C.Contract
   | PlayTrace C.Timeout C.Contract (List C.TransactionInput)
+  | FixInterval TimeInterval C.State
   | EvalValue C.Environment C.State C.Value
   | EvalObservation C.Environment C.State C.Observation
 
@@ -45,6 +49,15 @@ instance DecodeJson (Request Json) where
       mEnvironment <- getProp "environment"
       mInitialTime <- bindFlipped (instant <<< Milliseconds) <$> getProp
         "initialTime"
+      mInterval <-
+        bindFlipped
+          ( \(a /\ b) ->
+              ( do
+                  from <- instant (Milliseconds a)
+                  to <- instant (Milliseconds b)
+                  pure $ TimeInterval from to
+              )
+          ) <$> getProp "interval"
       mSize <- getProp "size"
       mSeed <- bindFlipped (Just <<< mkSeed) <$> getProp "seed"
       case requestType of
@@ -52,6 +65,10 @@ instance DecodeJson (Request Json) where
           (TestRoundtripSerialization <$> mTypeId <*> mJson)
         "generate-random-value" -> pure
           (GenerateRandomValue <$> mTypeId <*> pure mSize <*> pure mSeed)
+        "reduce-contract-until-quiescent" -> pure
+          ( ReduceContractUntilQuiescent <$> mEnvironment <*> mState <*>
+              mContract
+          )
         "compute-transaction" -> pure
           (ComputeTransaction <$> mTransactionInput <*> mState <*> mContract)
         "playtrace" -> pure
@@ -60,5 +77,7 @@ instance DecodeJson (Request Json) where
           (EvalValue <$> mEnvironment <*> mState <*> mValue)
         "eval-observation" -> pure
           (EvalObservation <$> mEnvironment <*> mState <*> mObservation)
+        "fix-interval" -> pure
+          (FixInterval <$> mInterval <*> mState)
         _ -> pure Nothing
 

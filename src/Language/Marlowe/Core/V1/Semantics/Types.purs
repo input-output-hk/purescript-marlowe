@@ -29,7 +29,7 @@ import Data.Argonaut.Extra
 import Data.Array (catMaybes)
 import Data.BigInt.Argonaut (BigInt)
 import Data.BigInt.Argonaut as BigInt
-import Data.DateTime.Instant (Instant)
+import Data.DateTime.Instant (Instant, unInstant)
 import Data.Either (Either(..))
 import Data.Foldable (maximum, minimum)
 import Data.Generic.Rep (class Generic)
@@ -43,6 +43,7 @@ import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
 import Data.String (toLower)
+import Data.Time.Duration (Milliseconds(..))
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, union)
@@ -803,6 +804,18 @@ derive instance ordEnvironment :: Ord Environment
 instance showEnvironment :: Show Environment where
   show v = genericShow v
 
+instance EncodeJson Environment where
+  encodeJson (Environment { timeInterval }) =
+    let
+      TimeInterval from to = timeInterval
+    in
+      encodeJson
+        { timeInterval: encodeJson
+            { from: let Milliseconds s = unInstant from in s
+            , to: let Milliseconds s = unInstant to in s
+            }
+        }
+
 instance DecodeJson Environment where
   decodeJson json = do
     obj <- decodeJObject json
@@ -975,6 +988,15 @@ derive instance eqIntervalResult :: Eq IntervalResult
 instance showIntervalResult :: Show IntervalResult where
   show v = genericShow v
 
+instance EncodeJson IntervalResult where
+  encodeJson (IntervalTrimmed env state) = encodeJson
+    { "environment": encodeJson env
+    , "state": encodeJson state
+    }
+  encodeJson (IntervalError err) = encodeJson
+    { "interval_error": encodeJson err
+    }
+
 data Payment = Payment AccountId Payee Token BigInt
 
 derive instance genericPayment :: Generic Payment _
@@ -1054,6 +1076,40 @@ derive instance eqReduceResult :: Eq ReduceResult
 
 instance showReduceResult :: Show ReduceResult where
   show = genericShow
+
+instance EncodeJson ReduceResult where
+  encodeJson (ContractQuiescent reduced warnings payments state contract) =
+    encodeJson
+      { "reduced": reduced
+      , "warnings": encodeJson warnings
+      , "payments": encodeJson payments
+      , "state": encodeJson state
+      , "contract": encodeJson contract
+      }
+  encodeJson RRAmbiguousTimeIntervalError = encodeJson
+    "RRAmbiguousTimeIntervalError"
+
+instance EncodeJson ReduceWarning where
+  encodeJson ReduceNoWarning = encodeJson "ReduceNoWarning"
+  encodeJson (ReduceNonPositivePay accountId payee token amount) = encodeJson
+    { "accountId": encodeJson accountId
+    , "payee": encodeJson payee
+    , "token": encodeJson token
+    , "amount": encodeJson amount
+    }
+  encodeJson (ReducePartialPay accountId payee token paid expected) = encodeJson
+    { "accountId": encodeJson accountId
+    , "payee": encodeJson payee
+    , "token": encodeJson token
+    , "paid": encodeJson paid
+    , "expected": encodeJson expected
+    }
+  encodeJson (ReduceShadowing valueId oldValue newValue) = encodeJson
+    { "valueId": encodeJson valueId
+    , "oldValue": oldValue
+    , "newValue": newValue
+    }
+  encodeJson ReduceAssertionFailed = encodeJson "ReduceAssertionFailed"
 
 data ApplyWarning
   = ApplyNoWarning
