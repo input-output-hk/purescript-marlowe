@@ -436,11 +436,11 @@
         "pre-commit-hooks": "pre-commit-hooks"
       },
       "locked": {
-        "lastModified": 1676558808,
-        "narHash": "sha256-iCbCYfsa1e5J2gYF6mKOfFKS1PGHdo6wJBoLmbnAEXA=",
+        "lastModified": 1679495749,
+        "narHash": "sha256-FKlSQZ8jsmO6nyHaf33UqNxjYZdIzeID8UpgebYgJUg=",
         "owner": "input-output-hk",
         "repo": "marlowe",
-        "rev": "6afc2621128625088aff7664bdb6ded5897c5e67",
+        "rev": "d89a7127581315d76206516bf81c2e7a5c7c3b4f",
         "type": "github"
       },
       "original": {

@@ -6,6 +6,7 @@ in  { name = "marlowe-spec-cli"
     , dependencies =
           marloweConf.dependencies
         # [ "console"
+          , "effect"
           , "node-process"
           , "node-streams"
           , "node-buffer"

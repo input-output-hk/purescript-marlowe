@@ -12,6 +12,7 @@ import Data.Time.Duration (Milliseconds(..))
 import Language.Marlowe.Core.V1.Semantics.Types
   ( Contract
   , Environment
+  , Observation
   , State
   , Timeout
   , TransactionInput
@@ -27,6 +28,7 @@ data Request transport
   | ComputeTransaction C.TransactionInput C.State C.Contract
   | PlayTrace C.Timeout C.Contract (List C.TransactionInput)
   | EvalValue C.Environment C.State C.Value
+  | EvalObservation C.Environment C.State C.Observation
 
 instance DecodeJson (Request Json) where
   decodeJson =
@@ -39,6 +41,7 @@ instance DecodeJson (Request Json) where
       mState <- getProp "state"
       mContract <- getProp "coreContract"
       mValue <- getProp "value"
+      mObservation <- getProp "observation"
       mEnvironment <- getProp "environment"
       mInitialTime <- bindFlipped (instant <<< Milliseconds) <$> getProp
         "initialTime"
@@ -55,5 +58,7 @@ instance DecodeJson (Request Json) where
           (PlayTrace <$> mInitialTime <*> mContract <*> mTransactionInputs)
         "eval-value" -> pure
           (EvalValue <$> mEnvironment <*> mState <*> mValue)
+        "eval-observation" -> pure
+          (EvalObservation <$> mEnvironment <*> mState <*> mObservation)
         _ -> pure Nothing
 
