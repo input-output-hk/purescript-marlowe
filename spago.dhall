@@ -11,6 +11,8 @@
   , "contravariant"
   , "control"
   , "datetime"
+  , "debug"
+  , "dodo-printer"
   , "either"
   , "enums"
   , "foldable-traversable"
