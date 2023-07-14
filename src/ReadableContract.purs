@@ -4,12 +4,15 @@ import Prelude
 
 import Control.Monad.State (State, evalState, execState, get, gets, put)
 import Data.Array (fold, length, partition)
+import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
+-- TODO: See if change NonEmptyArray with NonEmptyList that allows for pattern match and O(1) for cons
 import Data.Array.NonEmpty as NEA
-import Data.Lens (Lens', assign, modifying)
+import Data.Lens (Lens', assign, modifying, use, view)
 import Data.Lens.Record (prop)
+import Data.List (List(..), (:))
 import Data.Map as Map
-import Data.Maybe (Maybe(..), maybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Monoid (guard)
 import Data.Set as Set
 import Data.Traversable (for, for_)
@@ -129,29 +132,65 @@ generateParticipantsPreface i = fold
 -- leave gaps.
 -- Me quede aca
 -- El step ref deberia ser un Path o final, y el path es NEA de Branch o Inc
-type StepRef = NonEmptyArray Int
+data PathType
+  = BranchStep
+  | IncStep
+
+derive instance Eq PathType
+instance Show PathType where
+  show BranchStep = "BranchStep"
+  show IncStep = "IncStep"
+
+data StepRef
+  = InitialStep
+  | StepPath (NonEmptyArray PathType)
+  | FinalStep
+
+-- Remove single incs between two branches
+normalizeStepRef :: NonEmptyArray PathType -> NonEmptyArray PathType
+normalizeStepRef path = fromMaybe path $ NEA.fromFoldable $ removeSingleInc $
+  NEA.toUnfoldable path
+  where
+  removeSingleInc :: List PathType -> List PathType
+  removeSingleInc Nil = Nil
+  removeSingleInc (x : Nil) = x : Nil
+  removeSingleInc (x : y : Nil) = (x : y : Nil)
+  removeSingleInc (BranchStep : IncStep : BranchStep : xs) =
+    (BranchStep : removeSingleInc (BranchStep : xs))
+  removeSingleInc (x : xs) = x : removeSingleInc xs
 
 showStep :: StepRef -> String
-showStep s = NEA.intercalate "." (show <$> s)
+showStep InitialStep = "1"
+showStep FinalStep = "final step"
+showStep (StepPath path) = NEA.intercalate "." (show <$> tmp)
+  -- TODO: Remove tmp
+  -- showStep (StepPath path) = NEA.intercalate "." (show <$> trace {path, tmp} (\_ -> tmp ))
+  where
+  tmp = go (NEA.toUnfoldable $ normalizeStepRef path) (NEA.singleton 1)
+
+  go Nil intPath = intPath
+  go (h : t) intPath = go t
+    ( case h of
+        IncStep -> NEA.snoc intPath 0
+        BranchStep ->
+          let
+            { init, last } = NEA.unsnoc intPath
+          in
+            NEA.snoc' init (last + 1)
+    )
 
 firstStep :: StepRef
-firstStep = NEA.singleton 1
+firstStep = InitialStep
 
-branchStepH :: StepRef -> StepRef
-branchStepH s = NEA.snoc s 1
+branchStep :: StepRef -> StepRef
+branchStep InitialStep = StepPath (NEA.singleton BranchStep)
+branchStep (StepPath path) = StepPath (NEA.snoc path BranchStep)
+branchStep FinalStep = FinalStep
 
-incStepRefH :: StepRef -> StepRef
-incStepRefH s =
-  let
-    { init, last } = NEA.unsnoc s
-  in
-    NEA.snoc' init (last + 1)
-
-branchStepV :: StepRef -> StepRef
-branchStepV = incStepRefH
-
-incStepRefV :: StepRef -> StepRef
-incStepRefV = branchStepH
+incStepRef :: StepRef -> StepRef
+incStepRef InitialStep = StepPath (NEA.singleton IncStep)
+incStepRef (StepPath path) = StepPath (NEA.snoc path IncStep)
+incStepRef FinalStep = FinalStep
 
 requiresBranching :: Contract -> Boolean
 requiresBranching (If _ _ _) = true
@@ -240,10 +279,17 @@ _currStepRef :: forall a. Lens' (BuildStepState a) StepRef
 _currStepRef = prop (Proxy :: Proxy "currStepRef")
 
 branchStep' :: forall a. State (BuildStepState a) Unit
-branchStep' = modifying _currStepRef branchStepV
+-- branchStep' Close =  pure FinalStep
+branchStep' =
+  modifying _currStepRef branchStep
 
-incStepRef' :: forall a. State (BuildStepState a) Unit
-incStepRef' = modifying _currStepRef incStepRefV
+incStepRef' :: forall a. Contract -> State (BuildStepState a) StepRef
+incStepRef' Close = pure FinalStep
+incStepRef' _ = do
+  currStep <- use _currStepRef
+  assign _currStepRef (incStepRef currStep)
+  -- traceM {incCurr: currStep, inchNext: (incStepRef currStep) }
+  pure currStep
 
 buildSteps :: forall a. Contract -> NonEmptyArray (Doc a)
 buildSteps rootContract = evalState
@@ -280,12 +326,8 @@ buildSteps rootContract = evalState
   --   | Let S.ValueId Value Contract
   --   | Assert Observation Contract
   describeActionStep
-    :: Case -> State (BuildStepState a) (Doc a /\ StepRef /\ Contract)
-  -- TODO Action pattern match
-  describeActionStep (Case action c) = do
-    -- TODO: maybe refactor order and make incStepRef to return the new one
-    stepRef <- gets _.currStepRef
-    incStepRef'
+    :: Case -> StepRef -> State (BuildStepState a) (Doc a /\ Contract)
+  describeActionStep (Case action c) stepRef = do
     let
       actionMsg = case action of
         (Deposit to from tok val) -> fold
@@ -301,11 +343,7 @@ buildSteps rootContract = evalState
         (Choice (ChoiceId choiceName chooser) bounds) -> fold
           [ show chooser, " chooses ", choiceName, " between ", show bounds ]
         (Notify _) -> "Notify <todo obs>"
-    pure $ text ("* " <> actionMsg <> ": " <> goto stepRef c) /\ stepRef /\ c
-
-  goto :: StepRef -> Contract -> String
-  goto _ Close = "goto final step"
-  goto s _ = "goto " <> showStep s
+    pure $ text ("* " <> actionMsg <> ": goto " <> showStep stepRef) /\ c
 
   describeStep
     :: Contract
@@ -331,10 +369,12 @@ buildSteps rootContract = evalState
   describeStep (When cases _ timeoutCont) = do
     branchStep'
     casesResult <- for cases \cse -> do
-      actionDoc /\ stepRef /\ actionCont <- describeActionStep cse
+      let Case _ c = cse
+      stepRef <- incStepRef' c
+      actionDoc /\ actionCont <- describeActionStep cse stepRef
       pure $ actionDoc /\ stepRef /\ actionCont
-    timeoutStepRef <- gets _.currStepRef
-    -- incStepRef'
+    timeoutStepRef <- incStepRef' timeoutCont
+    --
     -- timeoutDesc <- describeStep cont
     let
       caseDocs = fst <$> casesResult
@@ -344,7 +384,7 @@ buildSteps rootContract = evalState
           <> indent
             ( lines
                 ( caseDocs <>
-                    [ text ("* timeout: " <> goto timeoutStepRef timeoutCont) ]
+                    [ text ("* timeout: goto" <> showStep timeoutStepRef) ]
                 )
             )
       ) /\ (caseConts <> [ timeoutStepRef /\ timeoutCont ])
