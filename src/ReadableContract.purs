@@ -202,11 +202,14 @@ requiresBranching _ = false
 showDate :: Timeout -> String
 showDate _ = "TODO"
 
+-- Aca me quede con un cambio de como se numeran los steps. Tendria que hacer un Unit test de eso
 generateFromModule :: forall a. Module -> Doc a
 generateFromModule m@(Module { metadata, contract }) = lines
   [ preface
   , softBreak
   , generateParticipantsPreface (partyInfoFromModule m)
+  -- TODO: Add value preface and timeout preface, and token summary (instead of parameter just abbreviate)
+  -- TODO: Choices preface?
   , softBreak
   , beforeContract
   , softBreak
@@ -222,8 +225,6 @@ generateFromModule m@(Module { metadata, contract }) = lines
     ]
 
   beforeContract = text "The contract is defined through a series of steps... "
-  closeDescription = text
-    "Final Step: All the remaining funds are distributed to the participants"
 
   requiresNewStep :: Contract -> Boolean
   requiresNewStep Close = true
@@ -318,13 +319,6 @@ buildSteps rootContract = evalState
       text ("Step " <> showStep stepRef <> ":") <> break <> indent (fst stepDef)
     for_ (snd stepDef) (\(contRef /\ cont) -> declareStep contRef cont)
 
-  -- data Contract
-  --   = Close
-  --   | Pay S.AccountId Payee S.Token Value Contract
-  --   | If Observation Contract Contract
-  --   | When (Array Case) Timeout Contract
-  --   | Let S.ValueId Value Contract
-  --   | Assert Observation Contract
   describeActionStep
     :: Case -> StepRef -> State (BuildStepState a) (Doc a /\ Contract)
   describeActionStep (Case action c) stepRef = do
@@ -365,6 +359,37 @@ buildSteps rootContract = evalState
         ]
     pure $
       (text payMsg <> fst contDesc) /\ snd contDesc
+  describeStep (Let _ _ cont) = do
+    contDesc <- describeStep cont
+    let
+      letMsg = "Let. "
+    pure $ (text letMsg <> fst contDesc) /\ snd contDesc
+  describeStep (Assert _ cont) = do
+    contDesc <- describeStep cont
+    let
+      assertMsg = "Assert. "
+    pure $ (text assertMsg <> fst contDesc) /\ snd contDesc
+  describeStep (If _ thenCont elseCont) = do
+    branchStep'
+    thenContRef <- incStepRef' thenCont
+    elseContRef <- incStepRef' elseCont
+    let
+      conts = [ thenContRef /\ thenCont, elseContRef /\ elseCont ]
+      ifMsg = fold
+        [ "If <todo> then goto "
+        , showStep thenContRef
+        , " else goto "
+        , showStep elseContRef
+
+        ]
+    pure $ text ifMsg /\ conts
+  -- data Contract
+  --   = Close
+  --   | Pay S.AccountId Payee S.Token Value Contract
+  --   | If Observation Contract Contract
+  --   | When (Array Case) Timeout Contract
+  --   | Let S.ValueId Value Contract
+  --   | Assert Observation Contract
   -- TODO: Non branching When
   describeStep (When cases _ timeoutCont) = do
     branchStep'
@@ -374,8 +399,6 @@ buildSteps rootContract = evalState
       actionDoc /\ actionCont <- describeActionStep cse stepRef
       pure $ actionDoc /\ stepRef /\ actionCont
     timeoutStepRef <- incStepRef' timeoutCont
-    --
-    -- timeoutDesc <- describeStep cont
     let
       caseDocs = fst <$> casesResult
       caseConts = (\(_ /\ r /\ c) -> r /\ c) <$> casesResult
@@ -384,7 +407,7 @@ buildSteps rootContract = evalState
           <> indent
             ( lines
                 ( caseDocs <>
-                    [ text ("* timeout: goto" <> showStep timeoutStepRef) ]
+                    [ text ("* timeout: goto " <> showStep timeoutStepRef) ]
                 )
             )
       ) /\ (caseConts <> [ timeoutStepRef /\ timeoutCont ])
